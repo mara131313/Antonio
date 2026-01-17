@@ -111,7 +111,6 @@ An on/off power button will be placed on the tip of the pinky finger. The thumb 
 - Concurrent handling of motors, audio, and displays
 - Real-time human–robot interaction
 
-
 ## QUESTIONS
 
 ### 1. What is the system boundary?
