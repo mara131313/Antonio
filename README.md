@@ -10,7 +10,7 @@ The robot is responsible for autonomous behavior, movement, and audio-visual fee
 
 
 ### ABOUT ROBOT
-The robot “ANTONIO” will be equipped with a speaker capable of playing multiple music genres. For each music category, the robot will perform a specific “emote” by coordinating movements of its hands, head, tail, and “legs,” allowing it to dance according to the music.  
+The robot "ANTONIO" features a red panda–inspired designed for expressive and interactive behavior. ANTONIO will be equipped with a speaker capable of playing multiple music genres. For each music category, the robot will perform a specific “emote” by coordinating movements of its hands, head, tail, and “legs,” allowing it to dance according to the music.  
 
 ANTONIO can move when the user interacts with a remote controller. If the user chooses to control the robot’s movement while it is dancing, they will have full control over its direction. Otherwise, ANTONIO will move autonomously based on the selected music genre.  
 
@@ -38,7 +38,10 @@ ANTONIO features two visual output elements:
 
 
 ### ABOUT REMOTE
-The remote controller serves two main purposes: controlling the robot's movement and selecting various settings. The proposed design of the remote is inspired by a red panda paw. This design was chosen to make the interaction playful, intuitive, and visually distinctive. At the center of the controller, a touch display will be integrated for menu navigation and visual feedback.  
+The remote controller serves two main purposes: controlling the robot's movement and selecting various settings.  
+
+The proposed design of the remote is inspired by a red panda paw, matching the robot’s red panda–inspired visual identity. This design was chosen to make the interaction playful, intuitive, and visually distinctive. At the center of the controller, a touch display will be integrated for menu navigation and visual feedback.  
+
 An on/off power button will be placed on the tip of the pinky finger. The thumb fingertip will include a joystick used for controlling the robot's movement. Additionally, a buzzer will be integrated into the index finger, providing audio feedback when selecting or confirming menu options.  
 
 1. MOVEMENT 
