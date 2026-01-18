@@ -59,8 +59,9 @@ An on/off power button will be placed on the tip of the pinky finger. The thumb 
 
 ## BILL OF MATERIALS 
 ### ROBOT:
-    - 6 x Servo motors
-    - 2 x DC motors
+    - 4 x SG90 Servo motors
+    - 2 x MG995 Servo motors
+    - 2 x DC motors 125:1 Gear ratio
     - ESP32
     - Servo driver PCA9685
     - Charging module TP5100
