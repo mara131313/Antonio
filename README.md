@@ -142,6 +142,8 @@ This is not just a tutorial because we are making our own designs for the robot'
 
 
 ## ROUGH SKETCHES
+![OverallSketch](images/sketches/Overall_Sketch.jpeg)
+
 ### FOR ANTONIO
 ![AntonioSketch](images/sketches/sketchAntonio.jpg)
 
