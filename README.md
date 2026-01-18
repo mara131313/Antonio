@@ -141,14 +141,8 @@ This is not just a tutorial because we are making our own designs for the robot'
  Yes, we will be needing 2 ESP32.
 
 
-## ROUGH SKETCHES
-![OverallSketch](images/sketches/Overall_Sketch.jpeg)
-
-### FOR ANTONIO
-![AntonioSketch](images/sketches/sketchAntonio.jpg)
-
-### FOR THE REMOTE
-![RemoteSketch](images/sketches/sketchRemote.jpg)
+## ROUGH SKETCH
+![Sketch](images/sketches/bothSketches.jpg)
 
 ## DIAGRAMS
 ![SoftwareArchitecture](images/diagrams/flowChart.png)
