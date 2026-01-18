@@ -91,7 +91,6 @@ An on/off power button will be placed on the tip of the pinky finger. The thumb 
 
 
 ## Features
-
 ### ROBOT
 - Audio-driven dancing behavior based on music genre
 - Real-time audio playback from microSD card
@@ -116,7 +115,6 @@ An on/off power button will be placed on the tip of the pinky finger. The thumb 
 - Real-time human–robot interaction
 
 ## QUESTIONS
-
 ### 1. What is the system boundary?
 For the robot:
   - inside: ESP32, all motors, OLEDs, Audio (Speaker, Amp), Battery and physical chassis/tracks.
@@ -142,9 +140,13 @@ This is not just a tutorial because we are making our own designs for the robot'
 ### 6. Do you need an ESP32?
  Yes, we will be needing 2 ESP32.
 
+
 ## ROUGH SKETCHES
 ### FOR ANTONIO
-![AntonioSketch](images/sketchAntonio.jpg)
+![AntonioSketch](images/sketches/sketchAntonio.jpg)
 
 ### FOR THE REMOTE
-![RemoteSketch](images/sketchRemote.jpg)
+![RemoteSketch](images/sketches/sketchRemote.jpg)
+
+## DIAGRAMS
+![SoftwareArchitecture](images/diagrams/flowChart.png)
