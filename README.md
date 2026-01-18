@@ -65,14 +65,14 @@ An on/off power button will be placed on the tip of the pinky finger. The thumb 
     - ESP32
     - Servo driver PCA9685
     - Charging module TP5100
-    - Audio amplifier module XS9871
-    - Speaker 5W 4Ω
+    - Audio amplifier module PAM8403
+    - 2 x Speaker 3W 4Ω
     - Microphone module
     - 2 x Samsung 18650 Li-ion 3.7V battery
     - Module slot card microSD
     - Module BMS Li-ion 2s 7.4V 20A
     - DC power jack adaptor
-    - 2 x Voltage regulator buck converter
+    - 2 x Voltage regulator buck converter LM2596
     - Dual H-bridge L298N
     - TFT/OLED display
     - OLED Display
@@ -82,7 +82,7 @@ An on/off power button will be placed on the tip of the pinky finger. The thumb 
     - ESP32 
     - 1 x Samsung 18650 Li-ion 3.7V battery
     - Charging module TP5100
-    - Voltage regulator boost converter
+    - Voltage regulator boost converter HW626
     - Buzzer
     - Capacitor
     - Joystick
