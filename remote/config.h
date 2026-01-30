@@ -1,0 +1,19 @@
+#define JOYSTICK_X_PIN 34
+#define JOYSTICK_Y_PIN 35
+#define JOYSTICK_SW_PIN 32
+#define PUSH_BUTTON_PIN 33
+#define BUZZER_PIN 25
+#define BATTERY_PIN 39
+
+#define RXD2 13
+#define TXD2 14
+
+#define BAUD_RATE 115200
+#define NEXTION_BAUD 9600
+
+//IDs for the battery images
+#define BATT_ICON_0_PERCENT 34
+#define BATT_ICON_25_PERCENT 35
+#define BATT_ICON_50_PERCENT 36
+#define BATT_ICON_75_PERCENT 37
+#define BATT_ICON_100_PERCENT 38
