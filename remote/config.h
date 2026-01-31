@@ -4,6 +4,7 @@
 #define PUSH_BUTTON_PIN 33
 #define BUZZER_PIN 25
 #define BATTERY_PIN 39
+#define DISPLAY_POWER_PIN 17
 
 #define RXD2 13
 #define TXD2 14

@@ -10,6 +10,7 @@ void setupInputs() {
   pinMode(JOYSTICK_Y_PIN, INPUT);
   pinMode(JOYSTICK_SW_PIN, INPUT_PULLUP);
   pinMode(PUSH_BUTTON_PIN, INPUT_PULLUP);
+  pinMode(DISPLAY_POWER_PIN, OUTPUT);
 }
 
 float getBatteryVoltage() {

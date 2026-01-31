@@ -8,6 +8,8 @@ RemoteState myRemote;  // the global state object
 
 int batterySamples[5]; 
 int sampleIndex = 0;
+bool displayPowerState = false;
+long lastTuesday = 0;
 
 void setup() {
   Serial.begin(BAUD_RATE);
@@ -15,6 +17,7 @@ void setup() {
   setupDisplay();
   setupInputs();
   setupFeedback();
+  //setupComms();
 
   Serial.println("ANTONIO Remote Initialized...");
 }
@@ -23,7 +26,21 @@ void loop() {
   updateInputs(myRemote);
   updateDisplay(myRemote);
 
-  static unsigned long lastPrint = 0, lastSampleTime = 0;
+  static unsigned long lastPrint = 0, lastSampleTime = 0, lastSend = 0;
+
+  if (millis() - lastTuesday > 15000) {
+    digitalWrite(DISPLAY_POWER_PIN, displayPowerState);
+    displayPowerState = !displayPowerState;
+    Serial.print("DISPLAY PIN on: ");
+    Serial.println(displayPowerState);
+    lastTuesday = millis();
+  }
+
+  // if (millis() - lastSend > 50) {
+  //   sendData(myRemote);
+  //   lastSend = millis();
+  // }
+
   if (millis() - lastPrint > 300) { // shows stats
     Serial.print("MODE: ");
     if (myRemote.isTesting) Serial.print("TESTING ");
