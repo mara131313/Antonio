@@ -8,8 +8,6 @@ RemoteState myRemote;  // the global state object
 
 int batterySamples[5]; 
 int sampleIndex = 0;
-bool displayPowerState = false;
-long lastTuesday = 0;
 
 void setup() {
   Serial.begin(BAUD_RATE);
@@ -25,16 +23,11 @@ void setup() {
 void loop() {
   updateInputs(myRemote);
   updateDisplay(myRemote);
+  espDeepSleep();
 
   static unsigned long lastPrint = 0, lastSampleTime = 0, lastSend = 0;
 
-  if (millis() - lastTuesday > 15000) {
-    digitalWrite(DISPLAY_POWER_PIN, displayPowerState);
-    displayPowerState = !displayPowerState;
-    Serial.print("DISPLAY PIN on: ");
-    Serial.println(displayPowerState);
-    lastTuesday = millis();
-  }
+  
 
   // if (millis() - lastSend > 50) {
   //   sendData(myRemote);

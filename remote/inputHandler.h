@@ -4,6 +4,8 @@ const int yMinThreshold = 1800, yMaxThreshold = 2400;
 unsigned long lastSwPressTime = 0;
 const long debounceDelay = 50;
 bool swState = HIGH; 
+unsigned long pressStartTime = 0;
+bool isPressed = false;
 
 void setupInputs() {
   pinMode(JOYSTICK_X_PIN, INPUT);
@@ -11,6 +13,28 @@ void setupInputs() {
   pinMode(JOYSTICK_SW_PIN, INPUT_PULLUP);
   pinMode(PUSH_BUTTON_PIN, INPUT_PULLUP);
   pinMode(DISPLAY_POWER_PIN, OUTPUT);
+  digitalWrite(DISPLAY_POWER_PIN, HIGH);
+}
+
+void espDeepSleep(){
+  if (digitalRead(PUSH_BUTTON_PIN) == LOW) {
+    if (!isPressed) {
+      digitalWrite(DISPLAY_POWER_PIN, HIGH);
+      pressStartTime = millis();
+      isPressed = true;
+    }
+    
+    if (millis() - pressStartTime > SLEEP_THRESHOLD) {
+      Serial.println("Shutting down...");
+      esp_sleep_enable_ext0_wakeup(PUSH_BUTTON_PIN, 0);
+      
+      while(digitalRead(PUSH_BUTTON_PIN) == LOW); 
+      
+      esp_deep_sleep_start();
+    }
+  } else {
+    isPressed = false;
+  }
 }
 
 float getBatteryVoltage() {

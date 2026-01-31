@@ -1,7 +1,7 @@
 #define JOYSTICK_X_PIN 34
 #define JOYSTICK_Y_PIN 35
 #define JOYSTICK_SW_PIN 32
-#define PUSH_BUTTON_PIN 33
+#define PUSH_BUTTON_PIN GPIO_NUM_33
 #define BUZZER_PIN 25
 #define BATTERY_PIN 39
 #define DISPLAY_POWER_PIN 17
@@ -11,6 +11,7 @@
 
 #define BAUD_RATE 115200
 #define NEXTION_BAUD 9600
+#define SLEEP_THRESHOLD 2000
 
 //IDs for the battery images
 #define BATT_ICON_0_PERCENT 34
