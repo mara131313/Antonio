@@ -17,11 +17,6 @@ struct RemoteState {
     uint8_t trackID;
 };
 
-struct SettingsCommand {
-    uint8_t volume; 
-    uint8_t faceIdx;
-    uint8_t speed;
-};
 
 struct StreamingPacket{
     uint32_t packetId;
@@ -31,23 +26,38 @@ struct StreamingPacket{
 };
 
 RemoteState incomingDataState;
-DriveCommand incomingDataDC;
+StreamingPacket incomingDataSP;
 unsigned long lastRecvTime = 0;
+unsigned long lastPrint = 0;
+bool musicPlaying;
 
 // Update this function in your receiver code
 void OnDataRecv(const esp_now_recv_info *recv_info, const uint8_t *incoming, int len) {
   // Extract the MAC address from the new info struct
   uint8_t* mac = recv_info->src_addr;
-  if(sizeof(incoming) == sizeof(RemoteState))
+  if(len == sizeof(RemoteState)) {
     memcpy(&incomingDataState, incoming, sizeof(incomingDataState));
-  else
-    memcpy(&incomingDataDC, incoming, sizeof(incomingDataDC));
+    musicPlaying = false;
+  }
+  else {
+    memcpy(&incomingDataSP, incoming, sizeof(incomingDataSP));
+    musicPlaying = true;
+  }
   lastRecvTime = millis(); 
-  
   Serial.printf("RX from: %02X:%02X:%02X:%02X:%02X:%02X\n", 
                 mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
   
-  Serial.printf("Drive: %d | Steer: %d\n", incomingDataDC.drive, incomingDataDC.steer);
+    if(!musicPlaying) {
+      Serial.print("MODE: ");
+      if (incomingDataState.isTesting) Serial.print("TESTING ");
+      else Serial.print("IDLE ");
+
+      Serial.printf("| Part: %d | Face: %d | Drive: %d | Steer: %d | Speed: %d\n",
+        incomingDataState.testPart, incomingDataState.faceIdx, incomingDataState.dc.drive, incomingDataState.dc.steer, incomingDataState.speed);
+
+    } else {
+      Serial.println("Music");
+    }
 }
 
 void setup() {
@@ -68,8 +78,8 @@ void loop() {
   // --- FAIL-SAFE LOGIC ---
   // If we haven't heard from the remote in 1 second, stop the robot
   if (millis() - lastRecvTime > 1000) {
-    incomingDataDC.drive = 0;
-    incomingDataDC.steer = 0;
+    incomingDataState.dc.drive = 0;
+    incomingDataState.dc.steer = 0;
     incomingDataState.isTesting = false;
     // Serial.println("!!! REMOTE DISCONNECTED - EMERGENCY STOP !!!");
   }

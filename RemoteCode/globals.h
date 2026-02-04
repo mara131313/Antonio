@@ -4,7 +4,7 @@
 #define JOYSTICK_X_PIN 34
 #define JOYSTICK_Y_PIN 35
 #define JOYSTICK_SW_PIN 32
-#define PUSH_BUTTON_PIN 33
+#define PUSH_BUTTON_PIN GPIO_NUM_33
 #define BUZZER_PIN 25
 #define BATTERY_PIN 39
 #define DISPLAY_POWER_PIN 17
@@ -55,6 +55,10 @@
 #define SLOW_OFF 5
 #define SLOW_ON 6
 
+// for sending protocols
+#define EVENT_SEND_REMOTE_STATE  (1 << 0)
+#define EVENT_SEND_STREAMING     (1 << 1)
+
 struct DriveCommand {
     int8_t drive;
     int8_t steer;
@@ -71,12 +75,6 @@ struct RemoteState {
     uint8_t trackID;
 };
 
-struct SettingsCommand {
-    uint8_t volume; 
-    uint8_t faceIdx;
-    uint8_t speed;
-};
-
 struct StreamingPacket{
     uint32_t packetId;
     uint8_t audioData[240];
@@ -86,5 +84,8 @@ struct StreamingPacket{
 
 
 void triggerBeep(int freq = 2000, int duration = 50);
+
+extern EventGroupHandle_t commsEvents;
+extern StreamingPacket myStreaming;
 
 #endif

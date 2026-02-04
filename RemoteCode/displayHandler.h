@@ -48,10 +48,13 @@ void updateNextionButton(String objName, bool state, int ON_ID, int OFF_ID) {
   Serial2.write(0xff); Serial2.write(0xff); Serial2.write(0xff);
 }
 
-void updateDisplay(RemoteState &state) {
+void updateDisplay(RemoteState &remote) {
   if (Serial2.available()) {
     String data = Serial2.readStringUntil('\n');
     data.trim();
+
+    uint8_t oldFace = remote.faceIdx;
+    uint32_t oldPacketId = myStreaming.packetId;
 
     Serial.print("Raw: ["); Serial.print(data); Serial.println("]");
 
@@ -65,39 +68,49 @@ void updateDisplay(RemoteState &state) {
     // for the music section
     else if (data.indexOf("SONG_PLAY") >= 0) {
       isToggleOn = !isToggleOn;
+      remote.musicPlaying = isToggleOn;
       updateNextionButton("play", isToggleOn, SONG_PAUSE, SONG_PLAY);
-      Serial.println(isToggleOn ? "MUSIC ACTIVE" : "MUSIC PAUSED");
+      Serial.println(isToggleOn ? "MUSIC PAUSED" : "MUSIC ON");
+      xEventGroupSetBits(commsEvents, EVENT_SEND_REMOTE_STATE); // Trigger resending the packet
     }
     else if (data.indexOf("SONG_PREV") >= 0 || data.indexOf("SONG_SKIP") >= 0 || data.indexOf("SONG") >= 0) {
       triggerBeep(2000, 100);
       sendRandomSongToNextion();
       // trebuie adaugata si citirea si adaugarea titlurilor
       if( data.indexOf("SONG_SKIP") >= 0 ) {
+        myStreaming.packetId++;
+        xEventGroupSetBits(commsEvents, EVENT_SEND_STREAMING); // Trigger Streaming
         // primeste titlul urmator
       }
       if (data.indexOf("SONG_PREV") >= 0) {
+        myStreaming.packetId--;
+        xEventGroupSetBits(commsEvents, EVENT_SEND_STREAMING); // Trigger Streaming
         // primeste titlul anterior
+      } else {
+        // my.streaming.packetId = ; SCRII ID UL CAND II PUI CITIRE
+        xEventGroupSetBits(commsEvents, EVENT_SEND_STREAMING); // Trigger Streaming
       }
     }
 
     // for test modes
-    else if (data.indexOf("T_LEGS") >= 0)  { state.testPart = 1; Serial.println("OK: LEGS"); }
-    else if (data.indexOf("T_WRIST") >= 0) { state.testPart = 2; Serial.println("OK: WRIST"); }
-    else if (data.indexOf("T_SHLD") >= 0)  { state.testPart = 3; Serial.println("OK: SHLD"); }
-    else if (data.indexOf("T_HEAD") >= 0)  { state.testPart = 4; Serial.println("OK: HEAD"); }
-    else if (data.indexOf("T_TAIL") >= 0)  { state.testPart = 5; Serial.println("OK: TAIL"); }
-    
-    else if (data.indexOf("START") >= 0 || (state.testPart == 1 /*&& swPressed */)) { 
-      state.isTesting = true; 
+else if (data.indexOf("T_LEGS") >= 0)  { remote.testPart = 1; xEventGroupSetBits(commsEvents, EVENT_SEND_REMOTE_STATE); }
+    else if (data.indexOf("T_WRIST") >= 0) { remote.testPart = 2; xEventGroupSetBits(commsEvents, EVENT_SEND_REMOTE_STATE); }
+    else if (data.indexOf("T_SHLD") >= 0)  { remote.testPart = 3; xEventGroupSetBits(commsEvents, EVENT_SEND_REMOTE_STATE); }
+    else if (data.indexOf("T_HEAD") >= 0)  { remote.testPart = 4; xEventGroupSetBits(commsEvents, EVENT_SEND_REMOTE_STATE); }
+    else if (data.indexOf("T_TAIL") >= 0)  { remote.testPart = 5; xEventGroupSetBits(commsEvents, EVENT_SEND_REMOTE_STATE); }    
+    else if (data.indexOf("START") >= 0 || (remote.testPart == 1 /*&& swPressed */)) { 
+      remote.isTesting = true; 
       triggerBeep(2000, 100); 
       updateNextionButton("bstart", true, TEST_PLAY_ON, TEST_PLAY_OFF);
       updateNextionButton("bstop", false, TEST_STOP_ON, TEST_STOP_OFF);
+      xEventGroupSetBits(commsEvents, EVENT_SEND_REMOTE_STATE);
     }
     else if (data.indexOf("STOP") >= 0)  { 
-      state.isTesting = false; 
+      remote.isTesting = false; 
       triggerBeep(1000, 100); 
       updateNextionButton("bstart", false, TEST_PLAY_ON, TEST_PLAY_OFF);
       updateNextionButton("bstop", true, TEST_STOP_ON, TEST_STOP_OFF);
+      xEventGroupSetBits(commsEvents, EVENT_SEND_REMOTE_STATE);
     }
 
     // for the remote settings
@@ -108,55 +121,62 @@ void updateDisplay(RemoteState &state) {
     
     // for antonio's settings
     else if (data.indexOf("FACE_HAPPY") >= 0) { 
-      state.faceIdx = 1; 
+      remote.faceIdx = 1; 
       Serial.println("OK: HAPPY"); 
       updateNextionButton("bhappy", true, HAPPY_ON, HAPPY_OFF);
       updateNextionButton("bplayful", false, PLAYFUL_ON, PLAYFUL_OFF);
       updateNextionButton("bheart", false, HEART_ON, HEART_OFF);
       updateNextionButton("bdefault", false, DEFAULT_ON, DEFAULT_OFF);
+      xEventGroupSetBits(commsEvents, EVENT_SEND_REMOTE_STATE);
     }
     else if (data.indexOf("FACE_PLAYFUL") >= 0) { 
-      state.faceIdx = 2; 
+      remote.faceIdx = 2; 
       Serial.println("OK: PLAYFUL"); 
       updateNextionButton("bhappy", false, HAPPY_ON, HAPPY_OFF);
       updateNextionButton("bplayful", true, PLAYFUL_ON, PLAYFUL_OFF);
       updateNextionButton("bheart", false, HEART_ON, HEART_OFF);
       updateNextionButton("bdefault", false, DEFAULT_ON, DEFAULT_OFF);
+      xEventGroupSetBits(commsEvents, EVENT_SEND_REMOTE_STATE);
     }
     else if (data.indexOf("FACE_HEART") >= 0) { 
-      state.faceIdx = 3; 
+      remote.faceIdx = 3; 
       Serial.println("OK: HEART"); 
       updateNextionButton("bhappy", false, HAPPY_ON, HAPPY_OFF);
       updateNextionButton("bplayful", false, PLAYFUL_ON, PLAYFUL_OFF);
       updateNextionButton("bheart", true, HEART_ON, HEART_OFF);
       updateNextionButton("bdefault", false, DEFAULT_ON, DEFAULT_OFF);
+      xEventGroupSetBits(commsEvents, EVENT_SEND_REMOTE_STATE);
     }
     else if (data.indexOf("FACE_DEFAULT") >= 0) { 
-      state.faceIdx = 4; 
+      remote.faceIdx = 4; 
       Serial.println("OK: DEFAULT"); 
       updateNextionButton("bhappy", false, HAPPY_ON, HAPPY_OFF);
       updateNextionButton("bplayful", false, PLAYFUL_ON, PLAYFUL_OFF);
       updateNextionButton("bheart", false, HEART_ON, HEART_OFF);
       updateNextionButton("bdefault", true, DEFAULT_ON, DEFAULT_OFF);
+      xEventGroupSetBits(commsEvents, EVENT_SEND_REMOTE_STATE);
     }
     
     else if (data.indexOf("SPEED_SLOW") >= 0) { 
-      state.speed = 0; 
+      remote.speed = 0; 
       updateNextionButton("bslow", true, SLOW_ON, SLOW_OFF);
       updateNextionButton("bmed", false, MED_ON, MED_OFF);
       updateNextionButton("bfast", false, FAST_ON, FAST_OFF);
+      xEventGroupSetBits(commsEvents, EVENT_SEND_REMOTE_STATE);
     }
     else if (data.indexOf("SPEED_MED") >= 0)  { 
-      state.speed = 1; 
+      remote.speed = 1; 
       updateNextionButton("bslow", false, SLOW_ON, SLOW_OFF);
       updateNextionButton("bmed", true, MED_ON, MED_OFF);
       updateNextionButton("bfast", false, FAST_ON, FAST_OFF);
+      xEventGroupSetBits(commsEvents, EVENT_SEND_REMOTE_STATE);
     }
     else if (data.indexOf("SPEED_FAST") >= 0) { 
-      state.speed = 2; 
+      remote.speed = 2; 
       updateNextionButton("bslow", false, SLOW_ON, SLOW_OFF);
       updateNextionButton("bmed", false, MED_ON, MED_OFF);
       updateNextionButton("bfast", true, FAST_ON, FAST_OFF);
+      xEventGroupSetBits(commsEvents, EVENT_SEND_REMOTE_STATE);
     }
   }
 }
