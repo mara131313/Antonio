@@ -1,15 +1,14 @@
 #ifndef GLOBALS_H
 #define GLOBALS_H
 
-#include <Arduino.h>
-
 #define JOYSTICK_X_PIN 34
 #define JOYSTICK_Y_PIN 35
 #define JOYSTICK_SW_PIN 32
-#define PUSH_BUTTON_PIN GPIO_NUM_33
+#define PUSH_BUTTON_PIN 33
 #define BUZZER_PIN 25
 #define BATTERY_PIN 39
 #define DISPLAY_POWER_PIN 17
+
 #define RXD2 13
 #define TXD2 14
 
@@ -17,11 +16,44 @@
 #define NEXTION_BAUD 9600
 #define SLEEP_THRESHOLD 2000
 
-#define BATT_ICON_0_PERCENT 34
-#define BATT_ICON_25_PERCENT 35
-#define BATT_ICON_50_PERCENT 36
-#define BATT_ICON_75_PERCENT 37
-#define BATT_ICON_100_PERCENT 38
+//IDs for the battery images
+#define BATT_ICON_0_PERCENT 37
+#define BATT_ICON_25_PERCENT 38
+#define BATT_ICON_50_PERCENT 39
+#define BATT_ICON_75_PERCENT 40
+#define BATT_ICON_100_PERCENT 41
+
+//IDs for individual song images
+#define SONG_0 59
+#define SONG_1 60
+#define SONG_2 61
+#define SONG_3 62
+#define SONG_4 63
+#define SONG_5 64
+
+//toggle buttons
+#define SONG_PLAY 16
+#define SONG_PAUSE 15
+#define TEST_PLAY_ON 34
+#define TEST_PLAY_OFF 33
+#define TEST_STOP_ON 36
+#define TEST_STOP_OFF 35
+#define THEME_OFF 11
+#define THEME_ON 10
+#define HAPPY_OFF 51
+#define HAPPY_ON 52
+#define PLAYFUL_OFF 53
+#define PLAYFUL_ON 54
+#define HEART_OFF 55
+#define HEART_ON 56
+#define DEFAULT_OFF 57 
+#define DEFAULT_ON 58
+#define FAST_ON 1
+#define FAST_OFF 2
+#define MED_ON 4
+#define MED_OFF 3
+#define SLOW_OFF 5
+#define SLOW_ON 6
 
 struct DriveCommand {
     int8_t drive;
