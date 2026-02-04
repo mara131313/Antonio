@@ -52,8 +52,8 @@ void OnDataRecv(const esp_now_recv_info *recv_info, const uint8_t *incoming, int
       if (incomingDataState.isTesting) Serial.print("TESTING ");
       else Serial.print("IDLE ");
 
-      Serial.printf("| Part: %d | Face: %d | Drive: %d | Steer: %d | Speed: %d\n",
-        incomingDataState.testPart, incomingDataState.faceIdx, incomingDataState.dc.drive, incomingDataState.dc.steer, incomingDataState.speed);
+      Serial.printf("| Part: %d | Face: %d | Drive: %d | Steer: %d | Speed: %d | TrackID: %d\n",
+        incomingDataState.testPart, incomingDataState.faceIdx, incomingDataState.dc.drive, incomingDataState.dc.steer, incomingDataState.speed, incomingDataState.trackID);
 
     } else {
       Serial.println("Music");

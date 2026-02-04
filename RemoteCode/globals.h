@@ -31,6 +31,9 @@
 #define SONG_4 63
 #define SONG_5 64
 
+#define MAX_SONGS 20
+#define MAX_NAME_LEN 64
+
 //toggle buttons
 #define SONG_PLAY 16
 #define SONG_PAUSE 15

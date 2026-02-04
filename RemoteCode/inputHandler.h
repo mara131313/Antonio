@@ -1,3 +1,6 @@
+#include "FS.h"
+#include "SD.h"
+#include "SPI.h"
 const int xMinThreshold = 1800, xMaxThreshold = 2400;
 const int yMinThreshold = 1800, yMaxThreshold = 2400;
 
@@ -6,6 +9,8 @@ const long debounceDelay = 50;
 bool swState = HIGH;
 unsigned long pressStartTime = 0;
 bool isPressed = false;
+char songList[MAX_SONGS][MAX_NAME_LEN];
+int totalSongs = 0;
 
 void setupInputs() {
   pinMode(JOYSTICK_X_PIN, INPUT);
@@ -37,6 +42,34 @@ void espDeepSleep() {
   } else {
     isPressed = false;
   }
+}
+
+void scanSDCard() {
+    totalSongs = 0;
+    File root = SD.open("/");
+    if (!root) return;
+
+    File file = root.openNextFile();
+    while (file && totalSongs < MAX_SONGS) {
+        if (!file.isDirectory()) {
+            const char* name = file.name();
+            // Skip leading slash if library adds it
+            if (name[0] == '/') name++; 
+
+            if (String(name).endsWith(".wav") || String(name).endsWith(".WAV")) {
+                // Safely copy the string to our fixed buffer
+                strncpy(songList[totalSongs], name, MAX_NAME_LEN - 1);
+                songList[totalSongs][MAX_NAME_LEN - 1] = '\0'; // Ensure null termination
+                
+                Serial.printf("Stored Index %d: %s\n", totalSongs, songList[totalSongs]);
+                totalSongs++;
+            }
+        }
+        file.close();
+        file = root.openNextFile();
+    }
+    root.close();
+    Serial.println("Scan function finished successfully.");
 }
 
 float getBatteryVoltage() {

@@ -11,6 +11,7 @@ DriveCommand myDc;
 QueueHandle_t commsQueue;
 EventGroupHandle_t commsEvents;
 StreamingPacket myStreaming;
+SemaphoreHandle_t xTransmitSemaphore;
 
 int batterySamples[5];
 int sampleIndex = 0;
@@ -40,7 +41,8 @@ void uiTask(void *pvParameters) {
 }
 // --- TASK 2: Comms & Battery (CORE 0) ---
 void commsTask(void *pvParameters) {
-  setupComms();  // Initialize ESP-NOW
+  setupComms();
+  esp_now_register_send_cb(OnDataSent);
   uint32_t lastBatteryCheck = 0;
 
   for (;;) {
@@ -57,13 +59,10 @@ void commsTask(void *pvParameters) {
       esp_now_send(robotAddress, (uint8_t *)&myStreaming, sizeof(myStreaming));
       Serial.println("Sent: StreamingPacket (ID/Audio changed)");
     }
-    Serial.printf("MUSIC PLAYING: %d\n", myRemote.musicPlaying);
     if (!myRemote.musicPlaying) {
       esp_now_send(robotAddress, (uint8_t *)&myRemote, sizeof(myRemote));
-      Serial.println("am trimis cacatu");
     } else {
       esp_now_send(robotAddress, (uint8_t *)&myStreaming, sizeof(myStreaming));
-      Serial.println("am trimis pisatu");
     }
 
     // handle battery
@@ -94,6 +93,51 @@ void commsTask(void *pvParameters) {
   }
 }
 
+void audioSenderTask(void *pvParameters) {
+  File audioFile = SD.open("/Hau - Alex Velea x Connect-R x Smiley.wav");
+  if (!audioFile) {
+    Serial.println("Failed to open file");
+    vTaskDelete(NULL);
+  }
+
+  // 1. Skip the 44-byte WAV header
+  audioFile.seek(44);
+
+  uint8_t buffer[250];
+  TickType_t xLastWakeTime = xTaskGetTickCount();
+  const TickType_t xFrequency = pdMS_TO_TICKS(15);  // Roughly 15.6ms
+
+  while (audioFile.available()) {
+    int bytesRead = audioFile.read(buffer, 250);
+
+    if (bytesRead > 0) {
+      // 2. Send the chunk
+      esp_now_send(robotAddress, buffer, bytesRead);
+    }
+
+    // 4. "Pace" the task to match 16kHz
+    vTaskDelayUntil(&xLastWakeTime, xFrequency);
+  }
+
+  audioFile.close();
+  vTaskDelete(NULL);
+}
+
+void OnDataSent(const wifi_tx_info_t *tx_info, esp_now_send_status_t status) {
+  // Note: tx_info->dest_addr contains the MAC it was sent to
+
+  // BaseType_t is the correct type (no 'x' at the start)
+  BaseType_t xHigherPriorityTaskWoken = pdFALSE;
+
+  // Give the semaphore to signal the task to send the next packet
+  xSemaphoreGiveFromISR(xTransmitSemaphore, &xHigherPriorityTaskWoken);
+
+  // If giving the semaphore unblocked a higher priority task, yield the CPU
+  if (xHigherPriorityTaskWoken) {
+    portYIELD_FROM_ISR();
+  }
+}
+
 void setup() {
   Serial.begin(BAUD_RATE);
   pinMode(BUZZER_PIN, OUTPUT);
@@ -102,11 +146,20 @@ void setup() {
 
   myRemote.musicPlaying = false;
 
+  if (!SD.begin(5)) {
+    Serial.println("CRITICAL ERROR: SD Card Mount Failed!");
+    Serial.println("Audio features will be disabled to prevent crash.");
+    // Stop here or set a flag
+    return;
+  }
+
+  Serial.println("SD Mounted Successfully.");
+  scanSDCard();
+
   // Queue only needs to hold the "most recent" state
   commsQueue = xQueueCreate(1, sizeof(RemoteState));
-
   commsEvents = xEventGroupCreate();
-
+  xTransmitSemaphore = xSemaphoreCreateBinary();
   if (commsQueue != NULL) {
     xTaskCreatePinnedToCore(commsTask, "Comms", 4000, NULL, 2, NULL, 0);
     xTaskCreatePinnedToCore(uiTask, "UI", 4000, NULL, 1, NULL, 1);
