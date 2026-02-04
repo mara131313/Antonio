@@ -2,7 +2,7 @@
 
 const int songImages[] = {SONG_0, SONG_1, SONG_2, SONG_3, SONG_4, SONG_5};
 const int numSongs = 6;
-bool isToggleOn = false, isThemeOn = true;
+bool isToggleOn = true, isThemeOn = true;
 
 void setupDisplay() {
   Serial2.begin(NEXTION_BAUD, SERIAL_8N1, RXD2, TXD2);

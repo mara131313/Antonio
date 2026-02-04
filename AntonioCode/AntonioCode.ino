@@ -56,7 +56,10 @@ void OnDataRecv(const esp_now_recv_info *recv_info, const uint8_t *incoming, int
         incomingDataState.testPart, incomingDataState.faceIdx, incomingDataState.dc.drive, incomingDataState.dc.steer, incomingDataState.speed, incomingDataState.trackID);
 
     } else {
-      Serial.println("Music");
+      Serial.printf("Drive: %d | Steer: %d | DC: %d\n",
+        incomingDataSP.dc.drive, incomingDataSP.dc.steer, incomingDataSP.driveControl);
+      for(int i = 0; i < 240; ++i)
+        Serial.printf("%d ", incomingDataSP.audioData[i]);
     }
 }
 

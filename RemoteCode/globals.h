@@ -78,6 +78,7 @@ struct RemoteState {
     uint8_t trackID;
 };
 
+
 struct StreamingPacket{
     uint32_t packetId;
     uint8_t audioData[240];

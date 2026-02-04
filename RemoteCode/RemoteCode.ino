@@ -61,8 +61,6 @@ void commsTask(void *pvParameters) {
     }
     if (!myRemote.musicPlaying) {
       esp_now_send(robotAddress, (uint8_t *)&myRemote, sizeof(myRemote));
-    } else {
-      esp_now_send(robotAddress, (uint8_t *)&myStreaming, sizeof(myStreaming));
     }
 
     // handle battery
@@ -93,34 +91,93 @@ void commsTask(void *pvParameters) {
   }
 }
 
+
 void audioSenderTask(void *pvParameters) {
-  File audioFile = SD.open("/Hau - Alex Velea x Connect-R x Smiley.wav");
-  if (!audioFile) {
-    Serial.println("Failed to open file");
-    vTaskDelete(NULL);
-  }
+    uint8_t audioBuffer[240]; // Packet size
+    
+    // 16kHz Pacing Calculation:
+    // 16,000 bytes / second.
+    // 240 bytes per packet.
+    // 16000 / 240 = 66.6 packets per second.
+    // 1000ms / 66.6 = 15ms delay per packet.
+    const TickType_t xFrequency = pdMS_TO_TICKS(15);
+    TickType_t xLastWakeTime;
 
-  // 1. Skip the 44-byte WAV header
-  audioFile.seek(44);
+    for(;;) {
+        // --- IDLE STATE ---
+        // Wait here until the UI sets musicPlaying to TRUE
+        if (!myRemote.musicPlaying) {
+            vTaskDelay(pdMS_TO_TICKS(100)); // Check every 100ms
+            continue;
+        }
 
-  uint8_t buffer[250];
-  TickType_t xLastWakeTime = xTaskGetTickCount();
-  const TickType_t xFrequency = pdMS_TO_TICKS(15);  // Roughly 15.6ms
+        // --- PREPARE STREAM ---
+        // 1. Validate Track ID
+        if (myRemote.trackID >= totalSongs) {
+            Serial.println("Error: Invalid Track ID");
+            myRemote.musicPlaying = false; // Reset flag
+            continue;
+        }
 
-  while (audioFile.available()) {
-    int bytesRead = audioFile.read(buffer, 250);
+        // 2. Construct File Path
+        char path[70];
+        // Note: songList is the char array we made earlier
+        snprintf(path, sizeof(path), "/%s", songList[myRemote.trackID]);
+        
+        File audioFile = SD.open(path);
+        if (!audioFile) {
+            Serial.printf("Error: Could not open %s\n", path);
+            myRemote.musicPlaying = false;
+            continue;
+        }
 
-    if (bytesRead > 0) {
-      // 2. Send the chunk
-      esp_now_send(robotAddress, buffer, bytesRead);
+        // 3. Skip WAV Header (44 bytes) to avoid static noise
+        audioFile.seek(44);
+        Serial.printf("Playing: %s\n", path);
+
+        // Initialize the Pacing Timer
+        xLastWakeTime = xTaskGetTickCount();
+
+        // --- STREAMING LOOP ---
+        while (audioFile.available() && myRemote.musicPlaying) {
+            
+            // A. Read Chunk
+            size_t bytesRead = audioFile.read(audioBuffer, 240);
+
+            // B. Send via ESP-NOW
+            memcpy(myStreaming.audioData, audioBuffer, sizeof(audioBuffer));
+            myStreaming.dc = myRemote.dc;
+            myStreaming.driveControl = false;
+            esp_err_t result = esp_now_send(robotAddress, (uint8_t *)&myStreaming, sizeof(StreamingPacket));
+
+            // C. Flow Control (The Green Light)
+            // Wait for the hardware to finish sending the previous packet
+            // If it takes longer than 50ms, the connection is likely broken
+            if (xSemaphoreTake(xTransmitSemaphore, pdMS_TO_TICKS(50)) != pdTRUE) {
+                // Optional: Count errors or break if connection is really bad
+                // Serial.println("Radio Congestion!");
+            }
+
+            // D. Precision Pacing (Crucial for Audio Quality)
+            // This ensures we send exactly at 16kHz speed, not faster
+            vTaskDelayUntil(&xLastWakeTime, xFrequency);
+        }
+
+        // --- CLEANUP ---
+        audioFile.close();
+        
+        // If we exited because the file finished (natural end)
+        if (myRemote.musicPlaying) {
+             Serial.println("Song Finished.");
+             myRemote.musicPlaying = false; // Turn off the flag
+             
+             // OPTIONAL: Auto-play next song?
+             // myRemote.trackID++;
+             // myRemote.musicPlaying = true;
+        } else {
+             Serial.println("Playback Stopped by User.");
+        }
     }
-
-    // 4. "Pace" the task to match 16kHz
-    vTaskDelayUntil(&xLastWakeTime, xFrequency);
-  }
-
-  audioFile.close();
-  vTaskDelete(NULL);
 }
 
 void OnDataSent(const wifi_tx_info_t *tx_info, esp_now_send_status_t status) {
@@ -163,6 +220,7 @@ void setup() {
   if (commsQueue != NULL) {
     xTaskCreatePinnedToCore(commsTask, "Comms", 4000, NULL, 2, NULL, 0);
     xTaskCreatePinnedToCore(uiTask, "UI", 4000, NULL, 1, NULL, 1);
+    xTaskCreatePinnedToCore(audioSenderTask, "Audio", 4000, NULL, 3, NULL, 0);
   }
 }
 
