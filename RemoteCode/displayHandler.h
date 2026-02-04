@@ -35,6 +35,27 @@ void sendRandomSongToNextion() {
   Serial.printf("Nextion Update: Song Random ID: %d (Index: %d)\n", selectedImageId, randomIndex);
 }
 
+void updateSongNameOnNextion(int songIdx) {
+    if (songIdx < 0 || songIdx >= MAX_SONGS) return;
+
+    String fullName = String(songList[songIdx]);
+    int dotIndex = fullName.lastIndexOf('.');
+    String displayName = (dotIndex > 0) ? fullName.substring(0, dotIndex) : fullName;
+
+    Serial2.print("song");
+    Serial2.print(songIdx);
+    Serial2.print(".txt=\"");
+    Serial2.print(displayName);
+    Serial2.print("\"");
+    Serial2.write(0xff); Serial2.write(0xff); Serial2.write(0xff);
+}
+
+void updateAllSongNames() {
+    for (int i = 0; i < 10; i++) { // Presupunem 10 butoane: song0 - song9
+        updateSongNameOnNextion(i);
+    }
+}
+
 void updateNextionButton(String objName, bool state, int ON_ID, int OFF_ID) {
   int imgId = state ? ON_ID : OFF_ID;
 
@@ -62,6 +83,7 @@ void updateDisplay(RemoteState &remote) {
     if (data.indexOf("PAGE_LOAD") >= 0) {
       int quickBatt = getBatteryPercentage(); 
       sendBatteryIconToNextion(quickBatt);
+      updateAllSongNames();
       Serial.println("NEW PAGE DETECTED");
     }
 
@@ -75,25 +97,31 @@ void updateDisplay(RemoteState &remote) {
     }
     else if (data.indexOf("SONG_PREV") >= 0 || data.indexOf("SONG_SKIP") >= 0 || data.indexOf("SONG") >= 0) {
       triggerBeep(2000, 100);
-      sendRandomSongToNextion();
-      // trebuie adaugata si citirea si adaugarea titlurilor
-      if( data.indexOf("SONG_SKIP") >= 0 ) {
+      
+      if (data.indexOf("SONG_SKIP") >= 0) {
+        remote.trackID = (remote.trackID + 1) % MAX_SONGS;
         myStreaming.packetId++;
-        xEventGroupSetBits(commsEvents, EVENT_SEND_STREAMING); // Trigger Streaming
-        // primeste titlul urmator
-      }
-      if (data.indexOf("SONG_PREV") >= 0) {
+      } else if (data.indexOf("SONG_PREV") >= 0) {
+        remote.trackID = (remote.trackID - 1 + MAX_SONGS) % MAX_SONGS;
         myStreaming.packetId--;
-        xEventGroupSetBits(commsEvents, EVENT_SEND_STREAMING); // Trigger Streaming
-        // primeste titlul anterior
-      } else {
-        // my.streaming.packetId = ; SCRII ID UL CAND II PUI CITIRE
-        xEventGroupSetBits(commsEvents, EVENT_SEND_STREAMING); // Trigger Streaming
+      } else if (data.startsWith("SONG") && data.length() > 4 && isDigit(data[4])) {
+          int selectedIdx = data.substring(4).toInt();
+          remote.trackID = selectedIdx;
+          myStreaming.packetId = selectedIdx; // Exemplu: ID-ul pachetului devine indexul piesei
       }
+
+      xEventGroupSetBits(commsEvents, EVENT_SEND_STREAMING);
+      
+      Serial2.print("song.txt=" + String(songList[remote.trackID]));
+      Serial2.write(0xff); Serial2.write(0xff); Serial2.write(0xff);
+
+      Serial.printf("textul este pentru melodie: %s\n", songList[remote.trackID]);
+      
+      sendRandomSongToNextion(); // Logica ta veche de imagine
     }
 
     // for test modes
-else if (data.indexOf("T_LEGS") >= 0)  { remote.testPart = 1; xEventGroupSetBits(commsEvents, EVENT_SEND_REMOTE_STATE); }
+    else if (data.indexOf("T_LEGS") >= 0)  { remote.testPart = 1; xEventGroupSetBits(commsEvents, EVENT_SEND_REMOTE_STATE); }
     else if (data.indexOf("T_WRIST") >= 0) { remote.testPart = 2; xEventGroupSetBits(commsEvents, EVENT_SEND_REMOTE_STATE); }
     else if (data.indexOf("T_SHLD") >= 0)  { remote.testPart = 3; xEventGroupSetBits(commsEvents, EVENT_SEND_REMOTE_STATE); }
     else if (data.indexOf("T_HEAD") >= 0)  { remote.testPart = 4; xEventGroupSetBits(commsEvents, EVENT_SEND_REMOTE_STATE); }
