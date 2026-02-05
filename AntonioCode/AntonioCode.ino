@@ -1,7 +1,8 @@
 #include <esp_now.h>
 #include <WiFi.h>
+#include <esp_wifi.h> 
 #include <freertos/stream_buffer.h>
-#include <driver/dac_oneshot.h> 
+#include <driver/dac_oneshot.h>
 
 // --- STRUCTURES ---
 struct DriveCommand {
@@ -34,39 +35,62 @@ bool musicPlaying = false;
 
 // --- AUDIO GLOBALS ---
 StreamBufferHandle_t audioBuffer; 
-dac_oneshot_handle_t dac_handle; 
+dac_oneshot_handle_t dac_left, dac_right; 
 esp_timer_handle_t audio_timer; 
 
-// --- AUDIO INTERRUPT (Runs every 62.5us) ---
+// ✅ MODIFICAT: Citește 2 bytes (1 sample MONO) în loc de 4 bytes (stereo)
 void IRAM_ATTR onAudioTimer(void* arg) {
-    uint8_t sample;
-    // Try to grab 1 byte from buffer (Non-blocking)
-    size_t bytes = xStreamBufferReceiveFromISR(audioBuffer, &sample, 1, NULL);
+    uint8_t samples[2]; // ✅ 2 bytes = 1 sample MONO 16-bit
     
-    if (bytes > 0) {
-        // FIXED: Using 'dac_oneshot_output_voltage' as requested by compiler
-        dac_oneshot_output_voltage(dac_handle, sample);
+    size_t bytes = xStreamBufferReceiveFromISR(audioBuffer, samples, 2, NULL);
+    
+    if (bytes == 2) {
+        // ✅ Conversie corectă SIGNED 16-bit → UNSIGNED 8-bit
+        int16_t sample16 = (int16_t)((samples[1] << 8) | samples[0]);
+        uint8_t sample8 = (sample16 / 256) + 128;
+        
+        // ✅ ACELAȘI sample pe ambii DAC (MONO → Stereo)
+        dac_oneshot_output_voltage(dac_left, sample8);
+        dac_oneshot_output_voltage(dac_right, sample8);
     } else {
-        // Silence if buffer empty
-        dac_oneshot_output_voltage(dac_handle, 0); 
+        dac_oneshot_output_voltage(dac_left, 128);
+        dac_oneshot_output_voltage(dac_right, 128);
     }
 }
 
-// --- CALLBACK: Radio Packet Received ---
+// ✅ ADĂUGAT: Debug pentru pachete pierdute
 void OnDataRecv(const esp_now_recv_info *recv_info, const uint8_t *incoming, int len) {
+  static uint32_t packetsReceived = 0;
+  static uint32_t packetsLost = 0;
+  static uint32_t lastPacketId = 0;
+  
   lastRecvTime = millis(); 
 
-  // Case 1: Control Packet (RemoteState)
   if(len == sizeof(RemoteState)) {
     memcpy(&incomingDataState, incoming, sizeof(incomingDataState));
     musicPlaying = false;
+    Serial.println("🛑 Music STOPPED via RemoteState");
   }
-  // Case 2: Audio Packet (StreamingPacket)
   else if (len == sizeof(StreamingPacket)) {
     memcpy(&incomingDataSP, incoming, sizeof(incomingDataSP));
     musicPlaying = true;
+    
+    // ✅ ADĂUGAT: Detectare pachete pierdute
+    packetsReceived++;
+    if (incomingDataSP.packetId != lastPacketId + 1 && lastPacketId != 0) {
+        packetsLost += (incomingDataSP.packetId - lastPacketId - 1);
+        Serial.printf("⚠️ LOST %d packets!\n", incomingDataSP.packetId - lastPacketId - 1);
+    }
+    lastPacketId = incomingDataSP.packetId;
+    
+    // ✅ ADĂUGAT: Stats la fiecare 200 pachete
+    if (packetsReceived % 200 == 0) {
+        Serial.printf("📊 Received: %d | Lost: %d (%.1f%% loss) | Buffer: %d bytes\n", 
+                      packetsReceived, packetsLost, 
+                      (packetsLost * 100.0) / (packetsReceived + packetsLost),
+                      xStreamBufferBytesAvailable(audioBuffer));
+    }
 
-    // Fill the buffer (Non-blocking)
     xStreamBufferSendFromISR(audioBuffer, incomingDataSP.audioData, 240, NULL);
   }
 }
@@ -74,57 +98,80 @@ void OnDataRecv(const esp_now_recv_info *recv_info, const uint8_t *incoming, int
 void setup() {
   Serial.begin(115200);
   WiFi.mode(WIFI_STA);
+  
+  // ✅ ADĂUGAT: WiFi max power pentru conexiune stabilă
+  esp_wifi_set_max_tx_power(84);
+  esp_wifi_set_ps(WIFI_PS_NONE);
+  
   pinMode(25, OUTPUT);
   pinMode(26, OUTPUT);
 
+  // ✅ MĂRIT: Buffer 8KB în loc de 4KB
+  audioBuffer = xStreamBufferCreate(8192, 1);
 
-  // 1. Create Audio Buffer (Holds ~0.25 seconds of audio)
-  audioBuffer = xStreamBufferCreate(4096, 1);
-
-  // 2. Setup DAC (FIXED for your library version)
-  dac_oneshot_config_t dac_conf = {
-      .chan_id = DAC_CHAN_1, // GPIO 25
+  // Setup DAC LEFT (GPIO 25)
+  dac_oneshot_config_t dac_conf_left = {
+      .chan_id = DAC_CHAN_0,
   };
-  // Use 'new_channel' instead of 'new_handle'
-  dac_oneshot_new_channel(&dac_conf, &dac_handle);
-  dac_oneshot_output_voltage(dac_handle, 0); // Start silent
+  dac_oneshot_new_channel(&dac_conf_left, &dac_left);
+  dac_oneshot_output_voltage(dac_left, 128);
 
-  // 3. Setup Timer (16kHz = 62.5 microseconds)
+  // Setup DAC RIGHT (GPIO 26)
+  dac_oneshot_config_t dac_conf_right = {
+      .chan_id = DAC_CHAN_1,
+  };
+  dac_oneshot_new_channel(&dac_conf_right, &dac_right);
+  dac_oneshot_output_voltage(dac_right, 128);
+
+  // Setup Timer (16kHz = 62.5us)
   const esp_timer_create_args_t timer_args = {
       .callback = &onAudioTimer,
       .name = "audio_timer"
   };
   esp_timer_create(&timer_args, &audio_timer);
-  esp_timer_start_periodic(audio_timer, 62); 
-
-  // 4. Init ESP-NOW
+  
+  // Init ESP-NOW
   if (esp_now_init() != ESP_OK) {
-    Serial.println("Error initializing ESP-NOW");
+    Serial.println("❌ Error initializing ESP-NOW");
     return;
   }
   esp_now_register_recv_cb(OnDataRecv);
   
-  Serial.println("Robot Receiver Ready (Fixed DAC Mode)");
+  Serial.println("✅ Robot Receiver Ready (MONO 16kHz 16-bit mode)");
+  Serial.println("Waiting for audio buffer to fill...");
+  
+  // ✅ ADĂUGAT: Pre-buffering - așteaptă 1000 bytes
+  while(xStreamBufferBytesAvailable(audioBuffer) < 1000) {
+    delay(50);
+  }
+  
+  // Pornește timer-ul DUPĂ pre-buffering
+  esp_timer_start_periodic(audio_timer, 62);
+  Serial.println("🎵 Audio timer started!");
 }
 
 void loop() {
-  // --- FAIL-SAFE ---
+  // FAIL-SAFE
   if (millis() - lastRecvTime > 1000) {
     incomingDataState.dc.drive = 0;
     incomingDataState.dc.steer = 0;
-    musicPlaying = false;
+    if (musicPlaying) {
+      Serial.println("⚠️ Connection lost - stopping music");
+      musicPlaying = false;
+    }
   }
 
-  // --- MOTOR CONTROL ---
+  // MOTOR CONTROL
   int drive = musicPlaying ? incomingDataSP.dc.drive : incomingDataState.dc.drive;
-  // int steer = musicPlaying ? incomingDataSP.dc.steer : incomingDataState.dc.steer;
 
-  // Debug Prints
+  // ✅ ADĂUGAT: Debug îmbunătățit
   static unsigned long lastPrint = 0;
-  if (millis() - lastPrint > 500) {
-      Serial.printf("Status: %s | Buffer: %d bytes\n", 
-          musicPlaying ? "PLAYING" : "IDLE", 
-          xStreamBufferBytesAvailable(audioBuffer));
+  if (millis() - lastPrint > 1000) {
+      Serial.printf("Status: %s | Buffer: %d/%d bytes | Heap: %d\n", 
+          musicPlaying ? "🎵 PLAYING" : "⏸️  IDLE", 
+          xStreamBufferBytesAvailable(audioBuffer),
+          xStreamBufferSpacesAvailable(audioBuffer),
+          ESP.getFreeHeap());
       lastPrint = millis();
   }
   
