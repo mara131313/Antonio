@@ -2,12 +2,8 @@
 
 const int songImages[] = {SONG_0, SONG_1, SONG_2, SONG_3, SONG_4, SONG_5};
 const int numSongs = 6;
-<<<<<<< HEAD
 bool isToggleOn = false, isThemeOn = true;
 int scrollOffset = 0;
-=======
-bool isToggleOn = true, isThemeOn = true;
->>>>>>> 41c80eecf69b1e1bd2f8f08634420c77f9d256f9
 
 void setupDisplay() {
   Serial2.begin(NEXTION_BAUD, SERIAL_8N1, RXD2, TXD2);
