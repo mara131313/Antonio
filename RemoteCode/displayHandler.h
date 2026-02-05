@@ -3,6 +3,7 @@
 const int songImages[] = {SONG_0, SONG_1, SONG_2, SONG_3, SONG_4, SONG_5};
 const int numSongs = 6;
 bool isToggleOn = false, isThemeOn = true;
+int scrollOffset = 0;
 
 void setupDisplay() {
   Serial2.begin(NEXTION_BAUD, SERIAL_8N1, RXD2, TXD2);
@@ -35,25 +36,30 @@ void sendRandomSongToNextion() {
   Serial.printf("Nextion Update: Song Random ID: %d (Index: %d)\n", selectedImageId, randomIndex);
 }
 
-void updateSongNameOnNextion(int songIdx) {
-    if (songIdx < 0 || songIdx >= MAX_SONGS) return;
-
-    String fullName = String(songList[songIdx]);
+void updateSongNameOnNextion(int buttonIdx) {
+  int realIdx = buttonIdx + scrollOffset;
+  
+  String displayName;
+  if (realIdx >= 0 && realIdx < MAX_SONGS) {
+    String fullName = String(songList[realIdx]);
     int dotIndex = fullName.lastIndexOf('.');
-    String displayName = (dotIndex > 0) ? fullName.substring(0, dotIndex) : fullName;
+    displayName = (dotIndex > 0) ? fullName.substring(0, dotIndex) : fullName;
+  } else {
+    displayName = "---"; // Slot gol dacă am scrollat prea mult
+  }
 
-    Serial2.print("song");
-    Serial2.print(songIdx);
-    Serial2.print(".txt=\"");
-    Serial2.print(displayName);
-    Serial2.print("\"");
-    Serial2.write(0xff); Serial2.write(0xff); Serial2.write(0xff);
+  Serial2.print("song");
+  Serial2.print(buttonIdx);
+  Serial2.print(".txt=\"");
+  Serial2.print(displayName);
+  Serial2.print("\"");
+  Serial2.write(0xff); Serial2.write(0xff); Serial2.write(0xff);
 }
 
-void updateAllSongNames() {
-    for (int i = 0; i < 10; i++) { // Presupunem 10 butoane: song0 - song9
-        updateSongNameOnNextion(i);
-    }
+void updateAllVisibleSongs() {
+  for (int i = 0; i < 10; i++) {
+    updateSongNameOnNextion(i);
+  }
 }
 
 void updateNextionButton(String objName, bool state, int ON_ID, int OFF_ID) {
@@ -83,11 +89,28 @@ void updateDisplay(RemoteState &remote) {
     if (data.indexOf("PAGE_LOAD") >= 0) {
       int quickBatt = getBatteryPercentage(); 
       sendBatteryIconToNextion(quickBatt);
-      updateAllSongNames();
       Serial.println("NEW PAGE DETECTED");
+
+      scrollOffset = 0;
+  
+      Serial2.print("song_slider.val=10"); 
+      Serial2.write(0xff); Serial2.write(0xff); Serial2.write(0xff);
+      
+      updateAllVisibleSongs(); 
+      Serial.println("UI Reset: Scroll la 0");
     }
 
     // for the music section
+    else if (data.indexOf("SLIDE=") >= 0) {
+      int sliderVal = data.substring(11).toInt();
+      int invertedVal = 10 - sliderVal; 
+      scrollOffset = map(invertedVal, 0, 10, 0, MAX_SONGS - 10);
+      if (scrollOffset < 0) scrollOffset = 0;
+      if (scrollOffset < 0) scrollOffset = 0;
+    if (scrollOffset > MAX_SONGS - 10) scrollOffset = MAX_SONGS - 10;
+
+    updateAllVisibleSongs();
+    }
     else if (data.indexOf("SONG_PLAY") >= 0) {
       isToggleOn = !isToggleOn;
       remote.musicPlaying = isToggleOn;
@@ -100,24 +123,30 @@ void updateDisplay(RemoteState &remote) {
       
       if (data.indexOf("SONG_SKIP") >= 0) {
         remote.trackID = (remote.trackID + 1) % MAX_SONGS;
-        myStreaming.packetId++;
+        // myStreaming.packetId++;
       } else if (data.indexOf("SONG_PREV") >= 0) {
         remote.trackID = (remote.trackID - 1 + MAX_SONGS) % MAX_SONGS;
-        myStreaming.packetId--;
+        // myStreaming.packetId--;
       } else if (data.startsWith("SONG") && data.length() > 4 && isDigit(data[4])) {
-          int selectedIdx = data.substring(4).toInt();
-          remote.trackID = selectedIdx;
-          myStreaming.packetId = selectedIdx; // Exemplu: ID-ul pachetului devine indexul piesei
+        int selectedIdx = data.substring(4).toInt();
+        // remote.trackID = selectedIdx;
+        myStreaming.packetId = selectedIdx + scrollOffset;
       }
-
+      if (remote.trackID >= MAX_SONGS) remote.trackID = MAX_SONGS - 1;
+      myStreaming.packetId = remote.trackID;
       xEventGroupSetBits(commsEvents, EVENT_SEND_STREAMING);
-      
-      Serial2.print("song.txt=" + String(songList[remote.trackID]));
+
+      String fullName = String(songList[remote.trackID]);
+      int dotIndex = fullName.lastIndexOf('.');
+      String displayName = (dotIndex > 0) ? fullName.substring(0, dotIndex) : fullName;
+
+      Serial2.print("song_title.txt=\"");
+      Serial2.print(displayName);
+      Serial2.print("\"");
       Serial2.write(0xff); Serial2.write(0xff); Serial2.write(0xff);
 
-      Serial.printf("textul este pentru melodie: %s\n", songList[remote.trackID]);
-      
-      sendRandomSongToNextion(); // Logica ta veche de imagine
+      Serial.printf("Nextion: song%d.txt setat la %s\n", remote.trackID, displayName.c_str());
+      sendRandomSongToNextion();
     }
 
     // for test modes
