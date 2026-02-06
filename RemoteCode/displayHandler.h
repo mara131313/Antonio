@@ -201,7 +201,13 @@ void updateDisplay(RemoteState &remote) {
     // for the remote settings
     else if (data.indexOf("THEME_ON") >= 0) {
       isThemeOn = !isThemeOn;
+    
+      if (!isThemeOn) {
+        noTone(BUZZER_PIN);
+      }
+    
       updateNextionButton("bthemeon", isThemeOn, THEME_ON, THEME_OFF);
+      Serial.printf("Theme Song Status: %s\n", isThemeOn ? "ENABLED" : "DISABLED");
     }
     
     // for antonio's settings

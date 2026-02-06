@@ -62,6 +62,13 @@
 #define EVENT_SEND_REMOTE_STATE  (1 << 0)
 #define EVENT_SEND_STREAMING     (1 << 1)
 
+//for the theme song
+#define NOTE_C4  262
+#define NOTE_E4  330
+#define NOTE_G4  392
+#define NOTE_C5  523
+#define NOTE_A4  440
+
 struct DriveCommand {
     int8_t drive;
     int8_t steer;
