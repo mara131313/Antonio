@@ -62,14 +62,14 @@
 #define EVENT_SEND_REMOTE_STATE  (1 << 0)
 #define EVENT_SEND_STREAMING     (1 << 1)
 
-//for the theme song (DE LA COLEGA)
+//for the theme song
 #define NOTE_C4  262
 #define NOTE_E4  330
 #define NOTE_G4  392
 #define NOTE_C5  523
 #define NOTE_A4  440
 
-// GENRE DEFINITIONS (DE LA TINE)
+// GENRE DEFINITIONS
 enum MusicGenre {
     GENRE_DEFAULT = 0,
     GENRE_POP = 1,
@@ -91,10 +91,10 @@ struct RemoteState {
     uint8_t speed;
     uint8_t testPart;
     bool isTesting;
-    bool isSwPressed; // (De la colega)
+    bool isSwPressed;
     bool musicPlaying;
     uint8_t trackID;
-    uint8_t currentGenre; // (De la tine)
+    uint8_t currentGenre;
 };
 
 struct StreamingPacket{
@@ -108,8 +108,6 @@ void triggerBeep(int freq = 2000, int duration = 50);
 
 extern EventGroupHandle_t commsEvents;
 extern StreamingPacket myStreaming;
-
-// Vector extern (DE LA TINE)
 extern uint8_t songGenres[MAX_SONGS];
 
 #endif

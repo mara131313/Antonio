@@ -4,6 +4,7 @@ const int songImages[] = {SONG_0, SONG_1, SONG_2, SONG_3, SONG_4, SONG_5};
 const int numSongs = 6;
 bool isToggleOn = false, isThemeOn = true;
 int scrollOffset = 0;
+int themeVolume = 70;
 
 void setupDisplay() {
   Serial2.begin(NEXTION_BAUD, SERIAL_8N1, RXD2, TXD2);
@@ -34,7 +35,6 @@ void sendRandomSongToNextion() {
   Serial2.write(0xff); Serial2.write(0xff); Serial2.write(0xff);
 }
 
-// --- UPDATE NAME FARA TAG-URI (DE LA TINE) ---
 void updateSongNameOnNextion(int buttonIdx) {
   int realIdx = buttonIdx + scrollOffset;
   String displayName;
@@ -106,7 +106,7 @@ void updateDisplay(RemoteState &remote) {
       updateNextionButton("play", isToggleOn, SONG_PAUSE, SONG_PLAY);
       xEventGroupSetBits(commsEvents, EVENT_SEND_REMOTE_STATE); 
     }
-    // --- NEXT SONG CU GENRE UPDATE (DE LA TINE) ---
+    // NEXT SONG
     else if (data.indexOf("SONG_PREV") >= 0 || data.indexOf("SONG_SKIP") >= 0 || data.startsWith("SONG")) {
       triggerBeep(2000, 100);
       if (data.indexOf("SONG_SKIP") >= 0) remote.trackID = (remote.trackID + 1) % totalSongs;
@@ -160,10 +160,17 @@ void updateDisplay(RemoteState &remote) {
       updateNextionButton("bstop", true, TEST_STOP_ON, TEST_STOP_OFF);
       xEventGroupSetBits(commsEvents, EVENT_SEND_REMOTE_STATE);
     }
+
+    //THEME ON/OFF + VOLUME
     else if (data.indexOf("THEME_ON") >= 0) {
       isThemeOn = !isThemeOn;
       if (!isThemeOn) noTone(BUZZER_PIN);
       updateNextionButton("bthemeon", isThemeOn, THEME_ON, THEME_OFF);
+    }
+    else if (data.indexOf("REMO_VOL") >= 0) {
+      int rawVol = (unsigned char)data[8];
+      themeVolume = map(rawVol, 0, 10, 1, 70);
+      Serial.printf("Volume Theme: %d\n", themeVolume);
     }
     
     // Faces

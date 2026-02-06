@@ -28,6 +28,7 @@ int noteDurations[] = {
 };
 int currentNote = 0;
 unsigned long lastNoteTime = 0;
+extern int themeVolume;
 
 void setupInputs() {
   pinMode(JOYSTICK_X_PIN, INPUT);
@@ -36,6 +37,7 @@ void setupInputs() {
   pinMode(PUSH_BUTTON_PIN, INPUT_PULLUP);
   pinMode(DISPLAY_POWER_PIN, OUTPUT);
   digitalWrite(DISPLAY_POWER_PIN, HIGH);
+  ledcAttach(BUZZER_PIN, 2000, 8);
 }
 
 void espDeepSleep() {
@@ -56,7 +58,6 @@ void espDeepSleep() {
   }
 }
 
-// --- SCANARE CU TAGURI (DE LA TINE) ---
 void scanSDCard() {
     totalSongs = 0;
     File root = SD.open("/");
@@ -106,24 +107,28 @@ int getBatteryPercentage() {
   return percentage;
 }
 
-// --- THEME SONG (DE LA COLEGA) ---
 void playThemeSong(bool musicIsPlaying) {
   if (!isThemeOn || musicIsPlaying) {
-    noTone(BUZZER_PIN);
+    ledcWrite(BUZZER_PIN, 0); 
     return;
   }
   unsigned long currentMillis = millis();
   if (currentMillis - lastNoteTime >= (unsigned long)noteDurations[currentNote]) {
+    int freq = themeMelody[currentNote];
+    if (freq > 0) {
+      ledcWriteTone(BUZZER_PIN, freq); 
+      int safeVol = (themeVolume > 128) ? 128 : themeVolume;
+      ledcWrite(BUZZER_PIN, safeVol); 
+    } else {
+      ledcWrite(BUZZER_PIN, 0);
+    }
     currentNote++;
     if (currentNote >= 9) {
       currentNote = 0;
       lastNoteTime = currentMillis + 800;
-      noTone(BUZZER_PIN);
+      ledcWrite(BUZZER_PIN, 0);
       return;
     }
-    int freq = themeMelody[currentNote];
-    if (freq > 0) tone(BUZZER_PIN, freq, noteDurations[currentNote] * 0.8);
-    else noTone(BUZZER_PIN);
     lastNoteTime = currentMillis;
   }
 }
