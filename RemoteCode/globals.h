@@ -62,12 +62,22 @@
 #define EVENT_SEND_REMOTE_STATE  (1 << 0)
 #define EVENT_SEND_STREAMING     (1 << 1)
 
-//for the theme song
+//for the theme song (DE LA COLEGA)
 #define NOTE_C4  262
 #define NOTE_E4  330
 #define NOTE_G4  392
 #define NOTE_C5  523
 #define NOTE_A4  440
+
+// GENRE DEFINITIONS (DE LA TINE)
+enum MusicGenre {
+    GENRE_DEFAULT = 0,
+    GENRE_POP = 1,
+    GENRE_RAP = 2,
+    GENRE_ROC = 3,
+    GENRE_MAN = 4,
+    GENRE_EDM = 5
+};
 
 struct DriveCommand {
     int8_t drive;
@@ -81,11 +91,11 @@ struct RemoteState {
     uint8_t speed;
     uint8_t testPart;
     bool isTesting;
-    bool isSwPressed;
+    bool isSwPressed; // (De la colega)
     bool musicPlaying;
     uint8_t trackID;
+    uint8_t currentGenre; // (De la tine)
 };
-
 
 struct StreamingPacket{
     uint32_t packetId;
@@ -94,10 +104,12 @@ struct StreamingPacket{
     DriveCommand dc;
 };
 
-
 void triggerBeep(int freq = 2000, int duration = 50);
 
 extern EventGroupHandle_t commsEvents;
 extern StreamingPacket myStreaming;
+
+// Vector extern (DE LA TINE)
+extern uint8_t songGenres[MAX_SONGS];
 
 #endif
