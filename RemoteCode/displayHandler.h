@@ -26,7 +26,18 @@ void sendBatteryIconToNextion(int percent) {
 }
 
 void sendRandomSongToNextion() {
-  int randomIndex = random(0, numSongs);
+  static int lastIndex = -1;
+  int randomIndex;
+
+  if (numSongs > 1) {
+    do {
+      randomIndex = random(0, numSongs);
+    } while (randomIndex == lastIndex);
+  } else {
+    randomIndex = 0;
+  }
+
+  lastIndex = randomIndex;
   int selectedImageId = songImages[randomIndex];
 
   Serial2.print("pic_song.pic=");
@@ -45,7 +56,7 @@ void updateSongNameOnNextion(int buttonIdx) {
     int dotIndex = fullName.lastIndexOf('.');
     displayName = (dotIndex > 0) ? fullName.substring(0, dotIndex) : fullName;
   } else {
-    displayName = "---"; // Slot gol dacă am scrollat prea mult
+    displayName = "---";
   }
 
   Serial2.print("song");
@@ -101,41 +112,15 @@ void updateDisplay(RemoteState &remote) {
       xEventGroupSetBits(commsEvents, EVENT_SEND_REMOTE_STATE);
       Serial.println("UI Reset: Scroll la 0");
     }
-
-    // for the music section
-    // else if (data.indexOf("SONG_SLIDE=") >= 0) {
-    //   int sliderVal = data.substring(11).toInt(); // Valoare între 0 și 10
-    //   int invertedVal = 10 - sliderVal; 
-    //   if (totalSongs <= 10) {
-    //     scrollOffset = 0;
-    //   } else {
-    //     scrollOffset = map(invertedVal, 0, 10, 0, totalSongs - 10);
-    //   }
-    //   if (scrollOffset < 0) scrollOffset = 0;
-    //   if (scrollOffset > (totalSongs - 10)) scrollOffset = max(0, totalSongs - 10);
-    //   updateAllVisibleSongs();
-    // }
     else if (data.indexOf("SONG_SLIDE=") >= 0) {
-    // În loc de toInt(), luăm caracterul de după "=" 
-    // data[11] este caracterul binar trimis de Nextion
     int sliderVal = (int)data[11]; 
-
-    // Debug ca să vezi valoarea reală transformată
     Serial.printf("Caracter primit: %d (ASCII)\n", sliderVal);
 
     if (totalSongs <= 10) {
-        scrollOffset = 0;
+      scrollOffset = 0;
     } else {
         int maxScrollSteps = totalSongs - 10;
-
-        // Formula cu float pentru precizie, folosind sliderVal-ul corectat
-        // Atenție: Dacă Nextion trimite 0-100 în loc de 0-10, împarți la 100.0
-        // Presupunem că slider-ul tău are range 0-10:
         float ratio = (float)(10 - sliderVal) / 10.0;
-        
-        // Dacă Nextion-ul tău are range 0-100 (default la slider), folosește:
-        // float ratio = (float)(100 - sliderVal) / 100.0;
-
         scrollOffset = (int)(ratio * maxScrollSteps + 0.5);
     }
 
