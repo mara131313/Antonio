@@ -91,26 +91,60 @@ void updateDisplay(RemoteState &remote) {
       sendBatteryIconToNextion(quickBatt);
       Serial.println("NEW PAGE DETECTED");
 
+      remote.isTesting = false;
       scrollOffset = 0;
   
       Serial2.print("song_slider.val=10"); 
       Serial2.write(0xff); Serial2.write(0xff); Serial2.write(0xff);
       
       updateAllVisibleSongs(); 
+      xEventGroupSetBits(commsEvents, EVENT_SEND_REMOTE_STATE);
       Serial.println("UI Reset: Scroll la 0");
     }
 
     // for the music section
-    else if (data.indexOf("SLIDE=") >= 0) {
-      int sliderVal = data.substring(11).toInt();
-      int invertedVal = 10 - sliderVal; 
-      scrollOffset = map(invertedVal, 0, 10, 0, MAX_SONGS - 10);
-      if (scrollOffset < 0) scrollOffset = 0;
-      if (scrollOffset < 0) scrollOffset = 0;
-    if (scrollOffset > MAX_SONGS - 10) scrollOffset = MAX_SONGS - 10;
+    // else if (data.indexOf("SONG_SLIDE=") >= 0) {
+    //   int sliderVal = data.substring(11).toInt(); // Valoare între 0 și 10
+    //   int invertedVal = 10 - sliderVal; 
+    //   if (totalSongs <= 10) {
+    //     scrollOffset = 0;
+    //   } else {
+    //     scrollOffset = map(invertedVal, 0, 10, 0, totalSongs - 10);
+    //   }
+    //   if (scrollOffset < 0) scrollOffset = 0;
+    //   if (scrollOffset > (totalSongs - 10)) scrollOffset = max(0, totalSongs - 10);
+    //   updateAllVisibleSongs();
+    // }
+    else if (data.indexOf("SONG_SLIDE=") >= 0) {
+    // În loc de toInt(), luăm caracterul de după "=" 
+    // data[11] este caracterul binar trimis de Nextion
+    int sliderVal = (int)data[11]; 
 
-    updateAllVisibleSongs();
+    // Debug ca să vezi valoarea reală transformată
+    Serial.printf("Caracter primit: %d (ASCII)\n", sliderVal);
+
+    if (totalSongs <= 10) {
+        scrollOffset = 0;
+    } else {
+        int maxScrollSteps = totalSongs - 10;
+
+        // Formula cu float pentru precizie, folosind sliderVal-ul corectat
+        // Atenție: Dacă Nextion trimite 0-100 în loc de 0-10, împarți la 100.0
+        // Presupunem că slider-ul tău are range 0-10:
+        float ratio = (float)(10 - sliderVal) / 10.0;
+        
+        // Dacă Nextion-ul tău are range 0-100 (default la slider), folosește:
+        // float ratio = (float)(100 - sliderVal) / 100.0;
+
+        scrollOffset = (int)(ratio * maxScrollSteps + 0.5);
     }
+
+    if (scrollOffset < 0) scrollOffset = 0;
+    if (scrollOffset > (totalSongs - 10)) scrollOffset = max(0, totalSongs - 10);
+
+    Serial.printf("Slider Real: %d | Offset: %d\n", sliderVal, scrollOffset);
+    updateAllVisibleSongs();
+}
     else if (data.indexOf("SONG_PLAY") >= 0) {
       isToggleOn = !isToggleOn;
       remote.musicPlaying = isToggleOn;
@@ -118,21 +152,24 @@ void updateDisplay(RemoteState &remote) {
       Serial.println(isToggleOn ? "MUSIC PAUSED" : "MUSIC ON");
       xEventGroupSetBits(commsEvents, EVENT_SEND_REMOTE_STATE); // Trigger resending the packet
     }
-    else if (data.indexOf("SONG_PREV") >= 0 || data.indexOf("SONG_SKIP") >= 0 || data.indexOf("SONG") >= 0) {
+
+    else if (data.indexOf("SONG_PREV") >= 0 || data.indexOf("SONG_SKIP") >= 0 || data.startsWith("SONG")) {
       triggerBeep(2000, 100);
       
       if (data.indexOf("SONG_SKIP") >= 0) {
-        remote.trackID = (remote.trackID + 1) % MAX_SONGS;
-        // myStreaming.packetId++;
-      } else if (data.indexOf("SONG_PREV") >= 0) {
-        remote.trackID = (remote.trackID - 1 + MAX_SONGS) % MAX_SONGS;
-        // myStreaming.packetId--;
-      } else if (data.startsWith("SONG") && data.length() > 4 && isDigit(data[4])) {
-        int selectedIdx = data.substring(4).toInt();
-        // remote.trackID = selectedIdx;
-        myStreaming.packetId = selectedIdx + scrollOffset;
+        remote.trackID = (remote.trackID + 1) % totalSongs;
+      } 
+      else if (data.indexOf("SONG_PREV") >= 0) {
+        remote.trackID = (remote.trackID - 1 + totalSongs) % totalSongs;
+      } 
+      else if (data.startsWith("SONG") && isDigit(data[4])) {
+        int buttonIdx = data.substring(4).toInt();
+        remote.trackID = buttonIdx + scrollOffset;
       }
-      if (remote.trackID >= MAX_SONGS) remote.trackID = MAX_SONGS - 1;
+
+      if (remote.trackID >= totalSongs) remote.trackID = totalSongs - 1;
+      if (remote.trackID < 0) remote.trackID = 0;
+
       myStreaming.packetId = remote.trackID;
       xEventGroupSetBits(commsEvents, EVENT_SEND_STREAMING);
 
@@ -145,17 +182,23 @@ void updateDisplay(RemoteState &remote) {
       Serial2.print("\"");
       Serial2.write(0xff); Serial2.write(0xff); Serial2.write(0xff);
 
-      Serial.printf("Nextion: song%d.txt setat la %s\n", remote.trackID, displayName.c_str());
+      Serial.printf("Nextion Play: %s (ID: %d)\n", displayName.c_str(), remote.trackID);
       sendRandomSongToNextion();
     }
 
     // for test modes
-    else if (data.indexOf("T_LEGS") >= 0)  { remote.testPart = 1; xEventGroupSetBits(commsEvents, EVENT_SEND_REMOTE_STATE); }
+    else if (data.indexOf("T_LEGS") >= 0)  { 
+      if (digitalRead(JOYSTICK_SW_PIN) == LOW) {
+        remote.testPart = 1; 
+        remote.isTesting = true; 
+        xEventGroupSetBits(commsEvents, EVENT_SEND_REMOTE_STATE);
+      } 
+    }
     else if (data.indexOf("T_WRIST") >= 0) { remote.testPart = 2; xEventGroupSetBits(commsEvents, EVENT_SEND_REMOTE_STATE); }
     else if (data.indexOf("T_SHLD") >= 0)  { remote.testPart = 3; xEventGroupSetBits(commsEvents, EVENT_SEND_REMOTE_STATE); }
     else if (data.indexOf("T_HEAD") >= 0)  { remote.testPart = 4; xEventGroupSetBits(commsEvents, EVENT_SEND_REMOTE_STATE); }
     else if (data.indexOf("T_TAIL") >= 0)  { remote.testPart = 5; xEventGroupSetBits(commsEvents, EVENT_SEND_REMOTE_STATE); }    
-    else if (data.indexOf("START") >= 0 || (remote.testPart == 1 /*&& swPressed */)) { 
+    else if (data.indexOf("START") >= 0) { 
       remote.isTesting = true; 
       triggerBeep(2000, 100); 
       updateNextionButton("bstart", true, TEST_PLAY_ON, TEST_PLAY_OFF);

@@ -95,7 +95,6 @@ void commsTask(void *pvParameters) {
 void audioSenderTask(void *pvParameters) {
     uint8_t audioBuffer[240];
     
-    // ✅ MODIFICAT: 7ms în loc de 15ms pentru MONO 16kHz
     // Calcul: 32000 bytes/sec ÷ 240 bytes = 133 packets/sec → 7.5ms per packet
     const TickType_t xFrequency = pdMS_TO_TICKS(7);
     
@@ -124,10 +123,10 @@ void audioSenderTask(void *pvParameters) {
         }
 
         audioFile.seek(44);
-        Serial.printf("🎵 Playing: %s\n", path);
+        Serial.printf("Playing: %s\n", path);
 
         xLastWakeTime = xTaskGetTickCount();
-        uint32_t packetCounter = 0; // ✅ ADĂUGAT: Numerotare pachete
+        uint32_t packetCounter = 0;
 
         while (audioFile.available() && myRemote.musicPlaying) {
             
@@ -136,17 +135,16 @@ void audioSenderTask(void *pvParameters) {
             memcpy(myStreaming.audioData, audioBuffer, sizeof(audioBuffer));
             myStreaming.dc = myRemote.dc;
             myStreaming.driveControl = false;
-            myStreaming.packetId = packetCounter++; // ✅ ADĂUGAT
+            myStreaming.packetId = packetCounter++;
             
             esp_err_t result = esp_now_send(robotAddress, (uint8_t *)&myStreaming, sizeof(StreamingPacket));
             
-            // ✅ ADĂUGAT: Debug pentru erori de trimitere
             if (result != ESP_OK) {
-                Serial.printf("❌ SEND FAILED! Error: %d\n", result);
+                Serial.printf("SEND FAILED! Error: %d\n", result);
             }
 
             if (xSemaphoreTake(xTransmitSemaphore, pdMS_TO_TICKS(50)) != pdTRUE) {
-                Serial.println("⚠️ Radio Congestion!");
+                Serial.println("Radio Congestion!");
             }
 
             vTaskDelayUntil(&xLastWakeTime, xFrequency);
@@ -155,10 +153,10 @@ void audioSenderTask(void *pvParameters) {
         audioFile.close();
         
         if (myRemote.musicPlaying) {
-             Serial.println("✅ Song Finished.");
+             Serial.println("Song Finished.");
              myRemote.musicPlaying = false;
         } else {
-             Serial.println("🛑 Playback Stopped by User.");
+             Serial.println("Playback Stopped by User.");
         }
     }
 }

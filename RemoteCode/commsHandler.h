@@ -7,7 +7,6 @@ uint8_t robotAddress[] = {0x88, 0x13, 0xBF, 0x0D, 0xBF, 0xA0};
 void setupComms() {
   WiFi.mode(WIFI_STA);
   
-  // ✅ ADĂUGAT: WiFi max power
   esp_wifi_set_max_tx_power(84);
   esp_wifi_set_ps(WIFI_PS_NONE);
   

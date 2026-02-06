@@ -17,6 +17,7 @@ struct RemoteState {
     uint8_t speed;
     uint8_t testPart;
     bool isTesting;
+    bool isSwPressed;
     bool musicPlaying;
     uint8_t trackID;
 };

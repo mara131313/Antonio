@@ -116,9 +116,16 @@ void updateInputs(RemoteState &state) {
       swState = currentSwState;
       lastSwPressTime = millis();
 
-      if (swState == LOW) {
-        state.isTesting = false;
-        Serial.println("SW Pressed - Testing STOPPED");
+      // Detectăm doar momentul apăsării (trecerea în LOW)
+      if (swState == HIGH) {
+        state.isSwPressed = !state.isSwPressed; // Toggle: din true devine false și invers
+        triggerBeep(1000, 50); // Feedback sonor scurt pentru toggle
+        
+        // Notificăm task-ul de comunicație că s-a schimbat ceva în RemoteState
+        xEventGroupSetBits(commsEvents, EVENT_SEND_REMOTE_STATE);
+        
+        Serial.print("Joystick SW Toggle: ");
+        Serial.println(state.isSwPressed ? "ON" : "OFF");
       }
     }
   }
