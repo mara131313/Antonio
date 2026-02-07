@@ -13,21 +13,19 @@
 #define TFT_RST  17
 #define SR_LATCH 27
 
-// CHIP SELECT (SEPARARE ECRANE)
-#define TFT_CS_SMALL 19  // Ecran Mic (Visualizer)
-#define TFT_CS_BIG   5   // Ecran Mare (Fata)
+#define TFT_CS_SMALL 19  
+#define TFT_CS_BIG   5   
 
 SPIClass spi(VSPI);
 
 // ========================================
-//  CONFIGURARE DIMENSIUNI
+//  CONFIGURARE & CULORI
 // ========================================
 #define SMALL_W 320
 #define SMALL_H 240
 #define BIG_W   480
 #define BIG_H   320
 
-// Culori Generale
 #define COLOR_BLACK   0x0000
 #define COLOR_BG      0x0000 
 #define COLOR_WHITE   0xFFFF
@@ -38,12 +36,11 @@ SPIClass spi(VSPI);
 #define COLOR_CYAN    0x07FF
 #define COLOR_MAGENTA 0xF81F
 
-// CULORI VIZUALIZATOR
 #define COLOR_BASS    0xF800  
 #define COLOR_MID     0x07E0  
 #define COLOR_HIGH    0x001F  
 
-// Variabile Vizualizator
+// Vizualizator
 #define NUM_BANDS 16
 #define BAND_WIDTH (SMALL_W / NUM_BANDS)
 #define BAND_SPACING 2 
@@ -55,11 +52,9 @@ uint8_t prevBandLevels[NUM_BANDS] = {0};
 bool strobeActive = false;
 unsigned long strobeStartTime = 0;
 bool screenIsBlack = true; 
+int bassThreshold = 95; 
 
-// Threshold marit pentru a preveni flash-uri false care consuma curent
-int bassThreshold = 50; 
-
-// Variabile Sistem
+// Sistem
 volatile int currentVolume = 0; 
 volatile unsigned long lastRecvTime = 0; 
 volatile uint8_t activeGenre = 0;
@@ -87,28 +82,21 @@ esp_timer_handle_t audio_timer;
 // ========================================
 //  DRIVER SHIFT REGISTER
 // ========================================
-
 void writeBus8_Small(uint8_t data) {
-  spi.write(0x00);        
-  spi.write(data);        
-  digitalWrite(SR_LATCH, LOW); 
-  digitalWrite(SR_LATCH, HIGH);
+  spi.write(0x00); spi.write(data);        
+  digitalWrite(SR_LATCH, LOW); digitalWrite(SR_LATCH, HIGH);
 }
 
 void writeBus16_Big(uint16_t data) {
-  spi.write(data >> 8);   
-  spi.write(data & 0xFF); 
-  digitalWrite(SR_LATCH, LOW); 
-  digitalWrite(SR_LATCH, HIGH);
+  spi.write(data >> 8); spi.write(data & 0xFF); 
+  digitalWrite(SR_LATCH, LOW); digitalWrite(SR_LATCH, HIGH);
 }
 
 // ========================================
 //  FUNCTII ECRAN MIC (VISUALIZER)
 // ========================================
 void cmdSmall(uint8_t cmd) {
-  // CRITIC: Asiguram ca Ecranul Mare e MORT (CS HIGH)
   digitalWrite(TFT_CS_BIG, HIGH);   
-  
   digitalWrite(TFT_CS_SMALL, LOW); 
   digitalWrite(TFT_RS, LOW); digitalWrite(TFT_WR, LOW);
   writeBus8_Small(cmd);
@@ -127,10 +115,8 @@ void data16Small(uint16_t data) {
   digitalWrite(TFT_CS_BIG, HIGH);
   digitalWrite(TFT_CS_SMALL, LOW);
   digitalWrite(TFT_RS, HIGH);
-  
   digitalWrite(TFT_WR, LOW); writeBus8_Small(data >> 8);   digitalWrite(TFT_WR, HIGH);
   digitalWrite(TFT_WR, LOW); writeBus8_Small(data & 0xFF); digitalWrite(TFT_WR, HIGH);
-  
   digitalWrite(TFT_CS_SMALL, HIGH);
 }
 
@@ -145,16 +131,14 @@ void fillRectSmall(uint16_t x, uint16_t y, uint16_t w, uint16_t h, uint16_t colo
   setAddrWindowSmall(x, y, x + w - 1, y + h - 1);
   uint32_t pixels = (uint32_t)w * h;
   
-  // SECVENTA STRICTA ANTI-BLEED
-  digitalWrite(TFT_CS_BIG, HIGH); // Asiguram OFF
-  digitalWrite(TFT_CS_SMALL, LOW); // Pornim Mic
+  digitalWrite(TFT_CS_BIG, HIGH); 
+  digitalWrite(TFT_CS_SMALL, LOW); 
   digitalWrite(TFT_RS, HIGH);
 
   for (uint32_t i = 0; i < pixels; i++) {
-    // High Byte
     digitalWrite(TFT_WR, LOW); spi.write(0x00); spi.write(color >> 8); 
     digitalWrite(SR_LATCH, LOW); digitalWrite(SR_LATCH, HIGH); digitalWrite(TFT_WR, HIGH);
-    // Low Byte
+    
     digitalWrite(TFT_WR, LOW); spi.write(0x00); spi.write(color & 0xFF);
     digitalWrite(SR_LATCH, LOW); digitalWrite(SR_LATCH, HIGH); digitalWrite(TFT_WR, HIGH);
   }
@@ -208,9 +192,6 @@ void fillRectBig(uint16_t x, uint16_t y, uint16_t w, uint16_t h, uint16_t color)
 
 void clearBig(uint16_t color) { fillRectBig(0, 0, BIG_W, BIG_H, color); }
 
-// ========================================
-//  LOGICA FACES + ANTI-BLEED FIX
-// ========================================
 void drawFace(uint8_t faceIdx) {
   uint16_t bg = COLOR_BLACK;
   uint16_t eyeColor = COLOR_WHITE;
@@ -238,12 +219,8 @@ void drawFace(uint8_t faceIdx) {
      fillRectBig(140, 240, 200, 20, eyeColor); 
   }
   
-  // === CRITIC: FIX PENTRU BLEEDING ===
-  // Imediat dupa ce am terminat de desenat fata, trimitem comanda NOP (0x00)
-  // Asta spune ecranului mare "Gata, inchide bufferul, nu mai asculta!"
+  // STOP TRANSMISSION EC MARE
   cmdBig(0x00); 
-  
-  // Asiguram inca o data ca CS-ul lui e HIGH
   digitalWrite(TFT_CS_BIG, HIGH);
 }
 
@@ -296,7 +273,7 @@ void updateVisualizerFromAudio() {
     uint16_t barY = BAR_Y_OFFSET + (MAX_BAR_HEIGHT - currentHeight);
     uint16_t prevBarY = BAR_Y_OFFSET + (MAX_BAR_HEIGHT - prevHeight);
     
-    // ANTI-BLEED Check inainte de fiecare bara
+    // ANTI-BLEED
     digitalWrite(TFT_CS_BIG, HIGH);
 
     if (currentHeight > prevHeight) {
@@ -330,16 +307,34 @@ void initBigScreen() {
 }
 
 // ========================================
-//  TASKS
+//  TASKS - AUDIO FIX (ATTENUATION & CLAMP)
 // ========================================
 void IRAM_ATTR onAudioTimer(void* arg) {
     uint8_t samples[2]; 
     size_t bytes = xStreamBufferReceiveFromISR(audioBuffer, samples, 2, NULL);
+    
     if (bytes == 2) {
-        int16_t sample16 = (int16_t)((samples[1] << 8) | samples[0]);
-        uint8_t sample8 = (sample16 / 256) + 128; 
-        dac_oneshot_output_voltage(dac_left, sample8); dac_oneshot_output_voltage(dac_right, sample8);
-    } else { dac_oneshot_output_voltage(dac_left, 128); dac_oneshot_output_voltage(dac_right, 128); }
+        // Reconstituim 16-bit signed
+        int16_t rawSample16 = (int16_t)((samples[1] << 8) | samples[0]);
+        
+        // === AUDIO FIX: ATENUARE DIGITALA (75% Volum) ===
+        // Previne clipping-ul in DAC-ul de 8 biti
+        int32_t attenuated = (rawSample16 * 3) / 4; 
+        
+        // Conversie la 8-bit unsigned (centrat pe 128)
+        int16_t outVal = (attenuated / 256) + 128;
+        
+        // Clamp Hard (Siguranta sa nu dam overflow la 0 sau 255)
+        if (outVal > 255) outVal = 255;
+        if (outVal < 0) outVal = 0;
+
+        dac_oneshot_output_voltage(dac_left, (uint8_t)outVal);
+        dac_oneshot_output_voltage(dac_right, (uint8_t)outVal);
+    } else {
+        // Silence lin
+        dac_oneshot_output_voltage(dac_left, 128);
+        dac_oneshot_output_voltage(dac_right, 128);
+    }
 }
 
 void OnDataRecv(const esp_now_recv_info *recv_info, const uint8_t *incoming, int len) {
@@ -369,9 +364,13 @@ void displayTask(void *pvParameters) {
         uint8_t requestedFace = incomingDataState.faceIdx;
         if (requestedFace == 0) requestedFace = 4;
         
+        // --- FACE LOGIC: STATIC (NO REFRESH LOOP) ---
         if (currentFace != requestedFace) {
             currentFace = requestedFace;
-            drawFace(currentFace); 
+            drawFace(currentFace);
+        } else {
+            // Daca nu desenam, tinem CS-ul SUS cu dintii!
+            digitalWrite(TFT_CS_BIG, HIGH);
         }
 
         if (millis() - lastRecvTime < 1000 && musicPlaying) {
@@ -384,20 +383,19 @@ void displayTask(void *pvParameters) {
                  for(int i=0; i<NUM_BANDS; i++) { bandLevels[i]=0; prevBandLevels[i]=0; }
                  screenIsBlack = true;
                  
-                 // Cand muzica se opreste, redesenam fata o data pentru a curata eventuale glitch-uri
+                 // Redesenam o data fata la stop, just in case
                  drawFace(currentFace);
             }
         }
-        vTaskDelay(pdMS_TO_TICKS(15)); 
+        vTaskDelay(pdMS_TO_TICKS(10)); 
     }
 }
 
 void setup() {
   Serial.begin(115200);
   
-  // SPI - 1MHz pentru siguranta
   spi.begin(18, -1, 23, -1);
-  spi.setFrequency(1000000); 
+  spi.setFrequency(2000000); 
   spi.setDataMode(SPI_MODE0); spi.setBitOrder(MSBFIRST);
   
   pinMode(SR_LATCH, OUTPUT); pinMode(TFT_WR, OUTPUT); pinMode(TFT_RS, OUTPUT);
@@ -411,9 +409,9 @@ void setup() {
   initSmallScreen();
   initBigScreen();
   
-  // Test scurt
-  clearSmall(COLOR_RED); delay(200); clearSmall(COLOR_BLACK);
-  clearBig(COLOR_BLUE); delay(200); clearBig(COLOR_BLACK);
+  // Test rapid
+  clearSmall(COLOR_RED); delay(100); clearSmall(COLOR_BLACK);
+  clearBig(COLOR_BLUE); delay(100); clearBig(COLOR_BLACK);
 
   WiFi.mode(WIFI_STA);
   esp_wifi_set_max_tx_power(84);
@@ -426,6 +424,7 @@ void setup() {
   dac_oneshot_new_channel(&dac_conf, &dac_left); dac_oneshot_output_voltage(dac_left, 128);
   dac_conf.chan_id = DAC_CHAN_1;
   dac_oneshot_new_channel(&dac_conf, &dac_right); dac_oneshot_output_voltage(dac_right, 128);
+  
   const esp_timer_create_args_t timer_args = { .callback = &onAudioTimer, .name = "audio_timer" };
   esp_timer_create(&timer_args, &audio_timer);
   esp_timer_start_periodic(audio_timer, 62);
