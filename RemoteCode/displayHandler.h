@@ -4,7 +4,7 @@ const int songImages[] = {SONG_0, SONG_1, SONG_2, SONG_3, SONG_4, SONG_5};
 const int numSongs = 6;
 bool isToggleOn = false, isThemeOn = true;
 int scrollOffset = 0;
-int themeVolume = 70;
+int themeVolume = 120;
 
 void setupDisplay() {
   Serial2.begin(NEXTION_BAUD, SERIAL_8N1, RXD2, TXD2);
@@ -167,10 +167,12 @@ void updateDisplay(RemoteState &remote) {
       if (!isThemeOn) noTone(BUZZER_PIN);
       updateNextionButton("bthemeon", isThemeOn, THEME_ON, THEME_OFF);
     }
-    else if (data.indexOf("REMO_VOL") >= 0) {
-      int rawVol = (unsigned char)data[8];
-      themeVolume = map(rawVol, 0, 10, 1, 70);
-      Serial.printf("Volume Theme: %d\n", themeVolume);
+    else if (data.indexOf("REMO_VOL=") >= 0) {
+      int pos = data.indexOf("="); 
+      int rawVol = (unsigned char)data[pos + 1]; 
+      Serial.printf("DEBUG Slider REMO_VOL: %d\n", rawVol);
+      themeVolume = map(rawVol, 0, 10, 1, 120);      
+      Serial.printf("Volume Theme Actualizat: %d\n", themeVolume);
     }
     
     // Faces
@@ -183,5 +185,19 @@ void updateDisplay(RemoteState &remote) {
     else if (data.indexOf("SPEED_SLOW") >= 0) { remote.speed = 0; updateNextionButton("bslow", true, SLOW_ON, SLOW_OFF); updateNextionButton("bmed", false, MED_ON, MED_OFF); updateNextionButton("bfast", false, FAST_ON, FAST_OFF); xEventGroupSetBits(commsEvents, EVENT_SEND_REMOTE_STATE); }
     else if (data.indexOf("SPEED_MED") >= 0)  { remote.speed = 1; updateNextionButton("bslow", false, SLOW_ON, SLOW_OFF); updateNextionButton("bmed", true, MED_ON, MED_OFF); updateNextionButton("bfast", false, FAST_ON, FAST_OFF); xEventGroupSetBits(commsEvents, EVENT_SEND_REMOTE_STATE); }
     else if (data.indexOf("SPEED_FAST") >= 0) { remote.speed = 2; updateNextionButton("bslow", false, SLOW_ON, SLOW_OFF); updateNextionButton("bmed", false, MED_ON, MED_OFF); updateNextionButton("bfast", true, FAST_ON, FAST_OFF); xEventGroupSetBits(commsEvents, EVENT_SEND_REMOTE_STATE); }
+  
+    // robot settings
+    else if (data.indexOf("VOL=") >= 0) {
+      int pos = data.indexOf("="); 
+      int rawVol = (unsigned char)data[pos + 1];
+      remote.volume = constrain(rawVol, 1, 10);
+      xEventGroupSetBits(commsEvents, EVENT_SEND_REMOTE_STATE);
+    }
+    else if (data.indexOf("BRIGHT=") >= 0) {
+      int pos = data.indexOf("="); 
+      int rawBright = (unsigned char)data[pos + 1];
+      remote.brightness = constrain(rawBright, 1, 10);
+      xEventGroupSetBits(commsEvents, EVENT_SEND_REMOTE_STATE);
+    }
   }
 }

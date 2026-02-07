@@ -86,7 +86,8 @@ struct DriveCommand {
 
 struct RemoteState {
     DriveCommand dc;
-    uint8_t volume; 
+    uint8_t volume;
+    uint8_t brightness;
     uint8_t faceIdx;
     uint8_t speed;
     uint8_t testPart;
