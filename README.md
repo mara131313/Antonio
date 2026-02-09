@@ -146,3 +146,5 @@ This is not just a tutorial because we are making our own designs for the robot'
 
 ## DIAGRAMS
 ![SoftwareArchitecture](images/diagrams/flowChart.png)
+
+![AntonioSchematic](images/Schematics/AntonioSchematic.jpeg)
