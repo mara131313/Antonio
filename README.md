@@ -181,3 +181,6 @@ The final build focused on reliable power distribution and the compact integrati
 ![AntonioSchematic](images/Schematics/AntonioSchematic.jpeg)
 
 ![RemoteChematic](images/Schematics/RemoteSchematic.png)
+
+- Link to the youtube video:
+https://youtu.be/va7jiXDgWas
