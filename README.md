@@ -156,7 +156,7 @@ The physical structure of both ANTONIO and the remote was modeled from scratch t
 
 ### REMOTE INTERFACE (GUI)
 The remote serves as the command center, featuring a custom Graphical User Interface (GUI) tailored for the touch display.
-- **Menu Structure:** Organized into intuitive pages (Test Mode, Settings, Music) with large, touch-friendly elements. It includes configuration settings for both ANTONIO and the remote, enabling customizations such as facial expressions and theme songs. The music tab features a scrollable list of 20 songs, displays random custom artwork for each track, and includes playback controls (pause/resume, next, previous).
+- **Menu Structure:** Organized into intuitive pages (Test Mode, Settings, Music) with large, touch-friendly elements. It includes configuration settings for both ANTONIO and the remote, enabling customizations such as facial expressions, theme songs, brightness and description of the project's creators. The music tab features a scrollable list of 20 songs, displays random custom artwork for each track, and includes playback controls (pause/resume, next, previous).
 - **User Feedback:** Provides immediate visual updates on the screen and audio cues via the integrated buzzer when commands are registered.
 - **Data Transmission:** Encodes user inputs (drive vectors, volume states, emote requests) into optimized data packets sent wirelessly to the robot.
 - **Lead Developer (Interface):** **Vraciu Mara Alina** is responsible for designing and implementing the custom, intuitive user interface.
