@@ -144,6 +144,37 @@ This is not just a tutorial because we are making our own designs for the robot'
 ## ROUGH SKETCH
 ![Sketch](images/sketches/bothSketches.jpg)
 
+## IMPLEMENTATION DETAILS
+This section outlines the realization of the project, transitioning from initial concepts to the fully functional physical prototype.
+
+### 3D DESIGN & MODELING
+The physical structure of both ANTONIO and the remote was modeled from scratch to adhere to the Red Panda aesthetic while ensuring mechanical robustness.
+- **Robot Chassis, Arms, and Head:** Engineered to house dual Li-ion batteries, speakers, the visualizer screen, ESP32, H-bridge motor driver, breadboards, shift registers, amplifier, microphone, and DC motors (driving the master/slave wheels and tracks). The design integrates a charging module, BMS, voltage regulators, and a 3.5-inch display, while providing sturdy anchor points for the 6 servos controlling the arms, head, tail, and paws.
+- **Locomotion System:** Custom-designed sprocket wheels and track links, 3D printed to ensure optimal grip and smooth differential steering.
+- **Remote Casing:** Modeled as a stylized paw, prioritizing ergonomics for joystick manipulation and touchscreen visibility. The enclosure accommodates a Li-ion battery, ESP32, switch button, touchscreen (with stylus), charging module, BMS, buzzer, voltage regulator, and microSD card slot.
+- **Lead Designer:** **Andrei Cosmin-Petru** is responsible for designing and modeling all custom 3D components for the project.
+
+### REMOTE INTERFACE (GUI)
+The remote serves as the command center, featuring a custom Graphical User Interface (GUI) tailored for the touch display.
+- **Menu Structure:** Organized into intuitive pages (Test Mode, Settings, Music) with large, touch-friendly elements. It includes configuration settings for both ANTONIO and the remote, enabling customizations such as facial expressions and theme songs. The music tab features a scrollable list of 20 songs, displays random custom artwork for each track, and includes playback controls (pause/resume, next, previous).
+- **User Feedback:** Provides immediate visual updates on the screen and audio cues via the integrated buzzer when commands are registered.
+- **Data Transmission:** Encodes user inputs (drive vectors, volume states, emote requests) into optimized data packets sent wirelessly to the robot.
+- **Lead Developer (Interface):** **Vraciu Mara Alina** is responsible for designing and implementing the custom, intuitive user interface.
+
+### FIRMWARE & CONTROL LOGIC
+The "brain" of the robot is designed to handle high-concurrency requirements, ensuring that music playback remains uninterrupted while the robot dances or moves.
+- **Dual-Core Architecture:** Leverages the ESP32's dual cores to separate blocking tasks (Audio decoding, WiFi/ESP-NOW communication on Core 0) from real-time operations (Motor control, Servo choreography, Display updates on Core 1).
+- **Audio-Motion Synchronization:** Utilizes specific algorithms to translate music genres into distinct servo choreographies.
+- **State Management:** Implements a robust state machine that seamlessly switches between "Autonomous Dance Mode" and "Manual Override" instantly upon detecting joystick input.
+- **Lead Developer:** **Pincu Victor Andrei** is responsible for component selection and the electrical design strategy, ensuring optimal power distribution and operational safety. He also developed the hardware logic and communication between modules using FreeRTOS.
+
+### ASSEMBLY & INTEGRATION
+The final build focused on reliable power distribution and the compact integration of all components.
+- **Power Management:** Integration of BMS modules and buck converters to supply stable, isolated voltage levels for the logic units (3.3V/5V) and high-torque motors (7.4V).
+- **Wire Routing:** Strategic internal cable management to prevent interference with moving parts, particularly around the rotating shoulder and neck mechanisms.
+- **Component Mounting:** Secure placement of the PCA9685 driver and L298N motor controller to ensure vibration resistance and effective heat dissipation.
+- **Assembly Team:** All three creators are responsible for the physical assembly of the project, including soldering, surface finishing (sanding), component placement, and final system integration.
+
 ## DIAGRAMS
 ![SoftwareArchitecture](images/diagrams/flowChart.png)
 
