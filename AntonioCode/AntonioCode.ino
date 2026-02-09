@@ -2,59 +2,118 @@
 #include <WiFi.h>
 #include <esp_wifi.h>
 #include <freertos/stream_buffer.h>
+#include <freertos/queue.h>
 #include <driver/dac_oneshot.h>
 #include <SPI.h>
+#include <Wire.h>
+#include <Adafruit_PWMServoDriver.h>
 
 // ========================================
 //  PINI HARDWARE
 // ========================================
-#define TFT_WR 16
-#define TFT_RS 4
-#define TFT_RST 17
+#define TFT_WR   17
+#define TFT_RS   4
+#define TFT_RST  16
 #define SR_LATCH 27
 
 #define TFT_CS_SMALL 19
-#define TFT_CS_BIG 5
+#define TFT_CS_BIG   5
 
+// I2C Pinii
+#define I2C_SDA 21
+#define I2C_SCL 22
+
+// ========================================
+//  CONFIGURARE MOTOARE
+// ========================================
+#define MOTOR1_IN1 7   
+#define MOTOR1_IN2 8   
+#define MOTOR1_ENA 9   
+
+#define MOTOR2_IN3 10  
+#define MOTOR2_IN4 11  
+#define MOTOR2_ENB 12  
+
+#define VITEZA_MAX 4095
+
+Adafruit_PWMServoDriver pwm = Adafruit_PWMServoDriver(0x40);
 SPIClass spi(VSPI);
 
 // ========================================
-//  CONFIGURARE & CULORI
+//  STRUCTURI DATE & COZI
 // ========================================
+struct DriveCommand {
+    int8_t drive; 
+    int8_t steer; 
+};
+
+struct MotorPacket {
+    int8_t drive;
+    int8_t steer;
+    uint8_t speed;
+};
+
+struct RemoteState {
+    DriveCommand dc;
+    uint8_t volume;
+    uint8_t brightness;
+    uint8_t faceIdx;
+    uint8_t speed;
+    uint8_t testPart;
+    bool isTesting;
+    bool isSwPressed;
+    bool musicPlaying;
+    uint8_t trackID;
+    uint8_t currentGenre;
+};
+
+struct StreamingPacket {
+    uint32_t packetId;
+    uint8_t audioData[240];
+    uint8_t driveControl;
+    DriveCommand dc;
+};
+
+// Globale
+RemoteState incomingDataState;
+StreamingPacket incomingDataSP;
+StreamBufferHandle_t audioBuffer;
+QueueHandle_t motorQueue;
+dac_oneshot_handle_t dac_left, dac_right;
+esp_timer_handle_t audio_timer;
+
+// Display
 #define SMALL_W 320
 #define SMALL_H 240
-#define BIG_W 480
-#define BIG_H 320
+#define BIG_W   480
+#define BIG_H   320
 
-#define COLOR_BLACK 0x0000
-#define COLOR_BG 0x0000
-#define COLOR_WHITE 0xFFFF
-#define COLOR_RED 0xF800
-#define COLOR_GREEN 0x07E0
-#define COLOR_BLUE 0x001F
-#define COLOR_YELLOW 0xFFE0
-#define COLOR_CYAN 0x07FF
+#define COLOR_BLACK   0x0000
+#define COLOR_BG      0x0000 
+#define COLOR_WHITE   0xFFFF
+#define COLOR_RED     0xF800
+#define COLOR_GREEN   0x07E0
+#define COLOR_BLUE    0x001F
+#define COLOR_YELLOW  0xFFE0
+#define COLOR_CYAN    0x07FF
 #define COLOR_MAGENTA 0xF81F
+#define COLOR_BASS    0xF800
+#define COLOR_MID     0x07E0
+#define COLOR_HIGH    0x001F
 
-#define COLOR_BASS 0xF800
-#define COLOR_MID 0x07E0
-#define COLOR_HIGH 0x001F
-
-// Vizualizator
 #define NUM_BANDS 16
 #define BAND_WIDTH (SMALL_W / NUM_BANDS)
 #define BAND_SPACING 2
 #define BAR_Y_OFFSET 20
 #define MAX_BAR_HEIGHT (SMALL_H - 40)
 
-uint8_t bandLevels[NUM_BANDS] = { 0 };
-uint8_t prevBandLevels[NUM_BANDS] = { 0 };
+uint8_t bandLevels[NUM_BANDS] = {0};
+uint8_t prevBandLevels[NUM_BANDS] = {0};
 bool strobeActive = false;
 unsigned long strobeStartTime = 0;
 bool screenIsBlack = true;
 int bassThreshold = 95;
 
-// Sistem
 volatile int currentVolume = 0;
 volatile unsigned long lastRecvTime = 0;
 volatile uint8_t activeGenre = 0;
@@ -62,481 +121,350 @@ bool musicPlaying = false;
 uint8_t currentFace = 255;
 
 // ========================================
-//  STRUCTURI WIFI
-// ========================================
-struct DriveCommand {
-  int8_t drive;
-  int8_t steer;
-};
-struct RemoteState {
-  DriveCommand dc;
-  uint8_t volume;
-  uint8_t brightness;
-  uint8_t faceIdx;
-  uint8_t speed;
-  uint8_t testPart;
-  bool isTesting;
-  bool isSwPressed;
-  bool musicPlaying;
-  uint8_t trackID;
-  uint8_t currentGenre;
-};
-struct StreamingPacket {
-  uint32_t packetId;
-  uint8_t audioData[240];
-  uint8_t driveControl;
-  DriveCommand dc;
-};
-RemoteState incomingDataState;
-StreamingPacket incomingDataSP;
-StreamBufferHandle_t audioBuffer;
-dac_oneshot_handle_t dac_left, dac_right;
-esp_timer_handle_t audio_timer;
-
-// ========================================
-//  DRIVER SHIFT REGISTER
+//  DRIVER ECRAN
 // ========================================
 void writeBus8_Small(uint8_t data) {
-  spi.write(0x00);
-  spi.write(data);
-  digitalWrite(SR_LATCH, LOW);
-  digitalWrite(SR_LATCH, HIGH);
+    spi.write(0x00); spi.write(data);
+    digitalWrite(SR_LATCH, LOW); digitalWrite(SR_LATCH, HIGH);
 }
-
 void writeBus16_Big(uint16_t data) {
-  spi.write(data >> 8);
-  spi.write(data & 0xFF);
-  digitalWrite(SR_LATCH, LOW);
-  digitalWrite(SR_LATCH, HIGH);
+    spi.write(data >> 8); spi.write(data & 0xFF);
+    digitalWrite(SR_LATCH, LOW); digitalWrite(SR_LATCH, HIGH);
 }
-
-// ========================================
-//  FUNCTII ECRAN MIC (VISUALIZER)
-// ========================================
 void cmdSmall(uint8_t cmd) {
-  digitalWrite(TFT_CS_BIG, HIGH);
-  digitalWrite(TFT_CS_SMALL, LOW);
-  digitalWrite(TFT_RS, LOW);
-  digitalWrite(TFT_WR, LOW);
-  writeBus8_Small(cmd);
-  digitalWrite(TFT_WR, HIGH);
-  digitalWrite(TFT_CS_SMALL, HIGH);
+    digitalWrite(TFT_CS_BIG, HIGH); digitalWrite(TFT_CS_SMALL, LOW);
+    digitalWrite(TFT_RS, LOW); digitalWrite(TFT_WR, LOW);
+    writeBus8_Small(cmd);
+    digitalWrite(TFT_WR, HIGH); digitalWrite(TFT_CS_SMALL, HIGH);
 }
-
 void dataSmall(uint8_t data) {
-  digitalWrite(TFT_CS_BIG, HIGH);
-  digitalWrite(TFT_CS_SMALL, LOW);
-  digitalWrite(TFT_RS, HIGH);
-  digitalWrite(TFT_WR, LOW);
-  writeBus8_Small(data);
-  digitalWrite(TFT_WR, HIGH);
-  digitalWrite(TFT_CS_SMALL, HIGH);
+    digitalWrite(TFT_CS_BIG, HIGH); digitalWrite(TFT_CS_SMALL, LOW);
+    digitalWrite(TFT_RS, HIGH); digitalWrite(TFT_WR, LOW);
+    writeBus8_Small(data);
+    digitalWrite(TFT_WR, HIGH); digitalWrite(TFT_CS_SMALL, HIGH);
 }
-
 void data16Small(uint16_t data) {
-  digitalWrite(TFT_CS_BIG, HIGH);
-  digitalWrite(TFT_CS_SMALL, LOW);
-  digitalWrite(TFT_RS, HIGH);
-  digitalWrite(TFT_WR, LOW);
-  writeBus8_Small(data >> 8);
-  digitalWrite(TFT_WR, HIGH);
-  digitalWrite(TFT_WR, LOW);
-  writeBus8_Small(data & 0xFF);
-  digitalWrite(TFT_WR, HIGH);
-  digitalWrite(TFT_CS_SMALL, HIGH);
+    digitalWrite(TFT_CS_BIG, HIGH); digitalWrite(TFT_CS_SMALL, LOW);
+    digitalWrite(TFT_RS, HIGH);
+    digitalWrite(TFT_WR, LOW); writeBus8_Small(data >> 8);   digitalWrite(TFT_WR, HIGH);
+    digitalWrite(TFT_WR, LOW); writeBus8_Small(data & 0xFF); digitalWrite(TFT_WR, HIGH);
+    digitalWrite(TFT_CS_SMALL, HIGH);
 }
-
 void setAddrWindowSmall(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1) {
-  cmdSmall(0x2A);
-  data16Small(x0);
-  data16Small(x1);
-  cmdSmall(0x2B);
-  data16Small(y0);
-  data16Small(y1);
-  cmdSmall(0x2C);
+    cmdSmall(0x2A); data16Small(x0); data16Small(x1);
+    cmdSmall(0x2B); data16Small(y0); data16Small(y1);
+    cmdSmall(0x2C);
 }
-
 void fillRectSmall(uint16_t x, uint16_t y, uint16_t w, uint16_t h, uint16_t color) {
-  if (w == 0 || h == 0) return;
-  setAddrWindowSmall(x, y, x + w - 1, y + h - 1);
-  uint32_t pixels = (uint32_t)w * h;
-
-  digitalWrite(TFT_CS_BIG, HIGH);
-  digitalWrite(TFT_CS_SMALL, LOW);
-  digitalWrite(TFT_RS, HIGH);
-
-  for (uint32_t i = 0; i < pixels; i++) {
-    digitalWrite(TFT_WR, LOW);
-    spi.write(0x00);
-    spi.write(color >> 8);
-    digitalWrite(SR_LATCH, LOW);
-    digitalWrite(SR_LATCH, HIGH);
-    digitalWrite(TFT_WR, HIGH);
-
-    digitalWrite(TFT_WR, LOW);
-    spi.write(0x00);
-    spi.write(color & 0xFF);
-    digitalWrite(SR_LATCH, LOW);
-    digitalWrite(SR_LATCH, HIGH);
-    digitalWrite(TFT_WR, HIGH);
-  }
-  digitalWrite(TFT_CS_SMALL, HIGH);
+    if (w == 0 || h == 0) return;
+    setAddrWindowSmall(x, y, x + w - 1, y + h - 1);
+    uint32_t pixels = (uint32_t)w * h;
+    digitalWrite(TFT_CS_BIG, HIGH); digitalWrite(TFT_CS_SMALL, LOW); digitalWrite(TFT_RS, HIGH);
+    for (uint32_t i = 0; i < pixels; i++) {
+        digitalWrite(TFT_WR, LOW); spi.write(0x00); spi.write(color >> 8);
+        digitalWrite(SR_LATCH, LOW); digitalWrite(SR_LATCH, HIGH); digitalWrite(TFT_WR, HIGH);
+        digitalWrite(TFT_WR, LOW); spi.write(0x00); spi.write(color & 0xFF);
+        digitalWrite(SR_LATCH, LOW); digitalWrite(SR_LATCH, HIGH); digitalWrite(TFT_WR, HIGH);
+    }
+    digitalWrite(TFT_CS_SMALL, HIGH);
 }
+void clearSmall(uint16_t color) { fillRectSmall(0, 0, SMALL_W, SMALL_H, color); }
+void triggerStrobe(bool active) { cmdSmall(active ? 0x21 : 0x20); }
 
-void clearSmall(uint16_t color) {
-  fillRectSmall(0, 0, SMALL_W, SMALL_H, color);
-}
-void triggerStrobe(bool active) {
-  cmdSmall(active ? 0x21 : 0x20);
-}
-
-// ========================================
-//  FUNCTII ECRAN MARE (FACES)
-// ========================================
 void cmdBig(uint8_t cmd) {
-  digitalWrite(TFT_CS_SMALL, HIGH);
-  digitalWrite(TFT_CS_BIG, LOW);
-  digitalWrite(TFT_RS, LOW);
-  digitalWrite(TFT_WR, LOW);
-  writeBus16_Big((uint16_t)cmd);
-  digitalWrite(TFT_WR, HIGH);
-  digitalWrite(TFT_CS_BIG, HIGH);
+    digitalWrite(TFT_CS_SMALL, HIGH); digitalWrite(TFT_CS_BIG, LOW);
+    digitalWrite(TFT_RS, LOW); digitalWrite(TFT_WR, LOW);
+    writeBus16_Big((uint16_t)cmd);
+    digitalWrite(TFT_WR, HIGH); digitalWrite(TFT_CS_BIG, HIGH);
 }
-
 void dataBig(uint16_t data) {
-  digitalWrite(TFT_CS_SMALL, HIGH);
-  digitalWrite(TFT_CS_BIG, LOW);
-  digitalWrite(TFT_RS, HIGH);
-  digitalWrite(TFT_WR, LOW);
-  writeBus16_Big(data);
-  digitalWrite(TFT_WR, HIGH);
-  digitalWrite(TFT_CS_BIG, HIGH);
+    digitalWrite(TFT_CS_SMALL, HIGH); digitalWrite(TFT_CS_BIG, LOW);
+    digitalWrite(TFT_RS, HIGH); digitalWrite(TFT_WR, LOW);
+    writeBus16_Big(data);
+    digitalWrite(TFT_WR, HIGH); digitalWrite(TFT_CS_BIG, HIGH);
 }
-
 void setAddrWindowBig(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1) {
-  cmdBig(0x2A);
-  dataBig(x0 >> 8);
-  dataBig(x0 & 0xFF);
-  dataBig(x1 >> 8);
-  dataBig(x1 & 0xFF);
-  cmdBig(0x2B);
-  dataBig(y0 >> 8);
-  dataBig(y0 & 0xFF);
-  dataBig(y1 >> 8);
-  dataBig(y1 & 0xFF);
-  cmdBig(0x2C);
+    cmdBig(0x2A); dataBig(x0 >> 8); dataBig(x0 & 0xFF); dataBig(x1 >> 8); dataBig(x1 & 0xFF);
+    cmdBig(0x2B); dataBig(y0 >> 8); dataBig(y0 & 0xFF); dataBig(y1 >> 8); dataBig(y1 & 0xFF);
+    cmdBig(0x2C);
 }
-
 void fillRectBig(uint16_t x, uint16_t y, uint16_t w, uint16_t h, uint16_t color) {
-  if (w == 0 || h == 0) return;
-  setAddrWindowBig(x, y, x + w - 1, y + h - 1);
-  uint32_t pixels = (uint32_t)w * h;
-
-  digitalWrite(TFT_CS_SMALL, HIGH);
-  digitalWrite(TFT_CS_BIG, LOW);
-  digitalWrite(TFT_RS, HIGH);
-
-  for (uint32_t i = 0; i < pixels; i++) {
-    digitalWrite(TFT_WR, LOW);
-    writeBus16_Big(color);
-    digitalWrite(TFT_WR, HIGH);
-  }
-  digitalWrite(TFT_CS_BIG, HIGH);
+    if (w == 0 || h == 0) return;
+    setAddrWindowBig(x, y, x + w - 1, y + h - 1);
+    uint32_t pixels = (uint32_t)w * h;
+    digitalWrite(TFT_CS_SMALL, HIGH); digitalWrite(TFT_CS_BIG, LOW); digitalWrite(TFT_RS, HIGH);
+    for (uint32_t i = 0; i < pixels; i++) {
+        digitalWrite(TFT_WR, LOW); writeBus16_Big(color); digitalWrite(TFT_WR, HIGH);
+    }
+    digitalWrite(TFT_CS_BIG, HIGH);
 }
-
-void clearBig(uint16_t color) {
-  fillRectBig(0, 0, BIG_W, BIG_H, color);
-}
-
+void clearBig(uint16_t color) { fillRectBig(0, 0, BIG_W, BIG_H, color); }
 void drawFace(uint8_t faceIdx) {
-  uint16_t bg = COLOR_BLACK;
-  uint16_t eyeColor = COLOR_WHITE;
-
-  switch (faceIdx) {
-    case 1:
-      bg = COLOR_YELLOW;
-      eyeColor = COLOR_BLACK;
-      break;
-    case 2:
-      bg = COLOR_CYAN;
-      eyeColor = COLOR_BLACK;
-      break;
-    case 3:
-      bg = 0xF81F;
-      eyeColor = COLOR_WHITE;
-      break;
-    default:
-      bg = COLOR_BLACK;
-      eyeColor = COLOR_GREEN;
-      break;
-  }
-
-  clearBig(bg);
-  int eyeSize = 60;
-  int eyeY = 100;
-
-  // Ochi
-  fillRectBig(100, eyeY, eyeSize, eyeSize, (faceIdx == 3) ? COLOR_RED : eyeColor);
-  fillRectBig(320, eyeY, eyeSize, eyeSize, (faceIdx == 3) ? COLOR_RED : eyeColor);
-
-  // Gura
-  if (faceIdx == 1) {
-    fillRectBig(140, 240, 200, 30, eyeColor);
-    fillRectBig(140, 240, 30, 60, eyeColor);
-    fillRectBig(310, 240, 30, 60, eyeColor);
-  } else if (faceIdx == 3) {
-    fillRectBig(160, 220, 160, 20, COLOR_RED);
-  } else {
-    fillRectBig(140, 240, 200, 20, eyeColor);
-  }
-
-  // STOP TRANSMISSION EC MARE
-  cmdBig(0x00);
-  digitalWrite(TFT_CS_BIG, HIGH);
+    uint16_t bg = COLOR_BLACK; uint16_t eyeColor = COLOR_WHITE;
+    switch (faceIdx) {
+        case 1: bg = COLOR_YELLOW; eyeColor = COLOR_BLACK; break;
+        case 2: bg = COLOR_CYAN; eyeColor = COLOR_BLACK; break;
+        case 3: bg = 0xF81F; eyeColor = COLOR_WHITE; break;
+        default: bg = COLOR_BLACK; eyeColor = COLOR_GREEN; break;
+    }
+    clearBig(bg);
+    int eyeSize = 60; int eyeY = 100;
+    fillRectBig(100, eyeY, eyeSize, eyeSize, (faceIdx == 3) ? COLOR_RED : eyeColor);
+    fillRectBig(320, eyeY, eyeSize, eyeSize, (faceIdx == 3) ? COLOR_RED : eyeColor);
+    if (faceIdx == 1) {
+        fillRectBig(140, 240, 200, 30, eyeColor); fillRectBig(140, 240, 30, 60, eyeColor); fillRectBig(310, 240, 30, 60, eyeColor);
+    } else if (faceIdx == 3) {
+        fillRectBig(160, 220, 160, 20, COLOR_RED);
+    } else {
+        fillRectBig(140, 240, 200, 20, eyeColor);
+    }
+    cmdBig(0x00); digitalWrite(TFT_CS_BIG, HIGH);
 }
 
-// ========================================
-//  LOGICA VIZUALIZATOR
-// ========================================
 uint16_t getGradientColor(uint8_t level, uint8_t bandIndex) {
-  if (bandIndex < 6) return COLOR_BASS;
-  else if (bandIndex < 12) return COLOR_MID;
-  else return COLOR_HIGH;
+    if (bandIndex < 6) return COLOR_BASS;
+    else if (bandIndex < 12) return COLOR_MID;
+    else return COLOR_HIGH;
 }
 
 void updateVisualizerFromAudio() {
-  static float phase = 0;
-
-  if (currentVolume > bassThreshold && !strobeActive) {
-    triggerStrobe(true);
-    strobeActive = true;
-    strobeStartTime = millis();
-    bandLevels[0] = 255;
-    bandLevels[1] = 240;
-  }
-  if (strobeActive && (millis() - strobeStartTime > 35)) {
-    triggerStrobe(false);
-    strobeActive = false;
-  }
-
-  float volumeFactor = currentVolume / 60.0;
-  if (volumeFactor > 2.5) volumeFactor = 2.5;
-
-  for (int i = 2; i < NUM_BANDS; i++) {
-    int wave = 50 + 40 * sin(phase * (i * 0.3) + millis() / 150.0);
-    int finalVal = wave * volumeFactor;
-    finalVal += random(-5, 5);
-    bandLevels[i] = constrain(finalVal, 0, 255);
-  }
-
-  if (!strobeActive) {
-    if (bandLevels[0] > 0) bandLevels[0] -= 20;
-    if (bandLevels[1] > 0) bandLevels[1] -= 15;
-    if (bandLevels[0] < currentVolume * 2) bandLevels[0] = currentVolume * 2;
-  }
-  phase += 0.2;
-
-  for (int i = 0; i < NUM_BANDS; i++) {
-    uint8_t currentLevel = bandLevels[i];
-    uint8_t prevLevel = prevBandLevels[i];
-    if (abs(currentLevel - prevLevel) < 3) continue;
-
-    uint16_t x = i * BAND_WIDTH + BAND_SPACING;
-    uint16_t barWidth = BAND_WIDTH - (2 * BAND_SPACING);
-    uint16_t currentHeight = map(currentLevel, 0, 255, 0, MAX_BAR_HEIGHT);
-    uint16_t prevHeight = map(prevLevel, 0, 255, 0, MAX_BAR_HEIGHT);
-    uint16_t barY = BAR_Y_OFFSET + (MAX_BAR_HEIGHT - currentHeight);
-    uint16_t prevBarY = BAR_Y_OFFSET + (MAX_BAR_HEIGHT - prevHeight);
-
-    // ANTI-BLEED
-    digitalWrite(TFT_CS_BIG, HIGH);
-
-    if (currentHeight > prevHeight) {
-      fillRectSmall(x, barY, barWidth, prevBarY - barY, getGradientColor(currentLevel, i));
-    } else if (currentHeight < prevHeight) {
-      fillRectSmall(x, prevBarY, barWidth, barY - prevBarY, COLOR_BG);
+    static float phase = 0;
+    if (currentVolume > bassThreshold && !strobeActive) {
+        triggerStrobe(true); strobeActive = true; strobeStartTime = millis();
+        bandLevels[0] = 255; bandLevels[1] = 240;
     }
-    prevBandLevels[i] = currentLevel;
-  }
+    if (strobeActive && (millis() - strobeStartTime > 35)) {
+        triggerStrobe(false); strobeActive = false;
+    }
+    float volumeFactor = currentVolume / 60.0;
+    if (volumeFactor > 2.5) volumeFactor = 2.5;
+    for (int i = 2; i < NUM_BANDS; i++) {
+        int wave = 50 + 40 * sin(phase * (i * 0.3) + millis() / 150.0);
+        int finalVal = wave * volumeFactor; finalVal += random(-5, 5);
+        bandLevels[i] = constrain(finalVal, 0, 255);
+    }
+    if (!strobeActive) {
+        if (bandLevels[0] > 0) bandLevels[0] -= 20;
+        if (bandLevels[1] > 0) bandLevels[1] -= 15;
+        if (bandLevels[0] < currentVolume * 2) bandLevels[0] = currentVolume * 2;
+    }
+    phase += 0.2;
+    for (int i = 0; i < NUM_BANDS; i++) {
+        uint8_t currentLevel = bandLevels[i]; uint8_t prevLevel = prevBandLevels[i];
+        if (abs(currentLevel - prevLevel) < 3) continue;
+        uint16_t x = i * BAND_WIDTH + BAND_SPACING; uint16_t barWidth = BAND_WIDTH - (2 * BAND_SPACING);
+        uint16_t currentHeight = map(currentLevel, 0, 255, 0, MAX_BAR_HEIGHT);
+        uint16_t prevHeight = map(prevLevel, 0, 255, 0, MAX_BAR_HEIGHT);
+        uint16_t barY = BAR_Y_OFFSET + (MAX_BAR_HEIGHT - currentHeight);
+        uint16_t prevBarY = BAR_Y_OFFSET + (MAX_BAR_HEIGHT - prevHeight);
+        digitalWrite(TFT_CS_BIG, HIGH);
+        if (currentHeight > prevHeight) fillRectSmall(x, barY, barWidth, prevBarY - barY, getGradientColor(currentLevel, i));
+        else if (currentHeight < prevHeight) fillRectSmall(x, prevBarY, barWidth, barY - prevBarY, COLOR_BG);
+        prevBandLevels[i] = currentLevel;
+    }
 }
-
-// ========================================
-//  INITIALIZARE
-// ========================================
 void initSmallScreen() {
-  cmdSmall(0x01);
-  delay(150);
-  cmdSmall(0x11);
-  delay(150);
-  cmdSmall(0x3A);
-  dataSmall(0x55);
-  cmdSmall(0x36);
-  dataSmall(0x68);
-  cmdSmall(0x29);
-  clearSmall(COLOR_BLACK);
+    cmdSmall(0x01); delay(150); cmdSmall(0x11); delay(150);
+    cmdSmall(0x3A); dataSmall(0x55); cmdSmall(0x36); dataSmall(0x68); cmdSmall(0x29); clearSmall(COLOR_BLACK);
 }
-
 void initBigScreen() {
-  cmdBig(0x01);
-  delay(150);
-  cmdBig(0x11);
-  delay(150);
-  cmdBig(0x3A);
-  dataBig(0x55);
-  cmdBig(0x36);
-  dataBig(0xE8);
-  cmdBig(0x29);
-  clearBig(COLOR_BLACK);
+    cmdBig(0x01); delay(150); cmdBig(0x11); delay(150);
+    cmdBig(0x3A); dataBig(0x55); cmdBig(0x36); dataBig(0xE8); cmdBig(0x29); clearBig(COLOR_BLACK);
 }
 
 // ========================================
-//  TASKS - AUDIO FIX (ATTENUATION & CLAMP)
+//  EXECUTIE MOTOARE (Core 1)
 // ========================================
+void executeMotors(int8_t drive, int8_t steer, uint8_t speedLvl) {
+    int pwmValue = 0;
+    if (speedLvl == 0) pwmValue = 2048;      
+    else if (speedLvl == 1) pwmValue = 3071; 
+    else pwmValue = 4095;                   
+
+    if (drive == 0 && steer == 0) {
+        pwm.setPWM(MOTOR1_ENA, 0, 0); pwm.setPWM(MOTOR2_ENB, 0, 0);
+        pwm.setPWM(MOTOR1_IN1, 0, 0); pwm.setPWM(MOTOR1_IN2, 0, 0);
+        pwm.setPWM(MOTOR2_IN3, 0, 0); pwm.setPWM(MOTOR2_IN4, 0, 0);
+        return;
+    }
+
+    int leftSpeed = pwmValue;
+    int rightSpeed = pwmValue;
+    if (steer == -1) leftSpeed = pwmValue / 3; 
+    else if (steer == 1) rightSpeed = pwmValue / 3;
+
+    if (drive == 0) { // Rotire
+        if (steer == -1) { 
+            pwm.setPWM(MOTOR1_IN1, 0, 0); pwm.setPWM(MOTOR1_IN2, 0, 4095); pwm.setPWM(MOTOR1_ENA, 0, pwmValue);
+            pwm.setPWM(MOTOR2_IN3, 0, 0); pwm.setPWM(MOTOR2_IN4, 0, 4095); pwm.setPWM(MOTOR2_ENB, 0, pwmValue);
+        } else if (steer == 1) {
+            pwm.setPWM(MOTOR1_IN1, 0, 4095); pwm.setPWM(MOTOR1_IN2, 0, 0); pwm.setPWM(MOTOR1_ENA, 0, pwmValue);
+            pwm.setPWM(MOTOR2_IN3, 0, 4095); pwm.setPWM(MOTOR2_IN4, 0, 0); pwm.setPWM(MOTOR2_ENB, 0, pwmValue);
+        }
+    }
+    else if (drive == 1) { // FATA
+        pwm.setPWM(MOTOR1_IN1, 0, 4095); pwm.setPWM(MOTOR1_IN2, 0, 0); pwm.setPWM(MOTOR1_ENA, 0, leftSpeed);
+        pwm.setPWM(MOTOR2_IN3, 0, 0); pwm.setPWM(MOTOR2_IN4, 0, 4095); pwm.setPWM(MOTOR2_ENB, 0, rightSpeed);
+    }
+    else if (drive == -1) { // SPATE
+        pwm.setPWM(MOTOR1_IN1, 0, 0); pwm.setPWM(MOTOR1_IN2, 0, 4095); pwm.setPWM(MOTOR1_ENA, 0, leftSpeed);
+        pwm.setPWM(MOTOR2_IN3, 0, 4095); pwm.setPWM(MOTOR2_IN4, 0, 0); pwm.setPWM(MOTOR2_ENB, 0, rightSpeed);
+    }
+}
+
+// ========================================
+//  TASK-URI
+// ========================================
+
+// TASK MOTOARE (Core 1)
+void motorTask(void *pvParameters) {
+    MotorPacket mp;
+    uint32_t lastCmdTime = millis();
+    
+    for(;;) {
+        if (xQueueReceive(motorQueue, &mp, pdMS_TO_TICKS(20))) {
+            lastCmdTime = millis();
+            executeMotors(mp.drive, mp.steer, mp.speed);
+        } else {
+            if (millis() - lastCmdTime > 500) {
+                 executeMotors(0, 0, 0);
+            }
+        }
+    }
+}
+
+// TASK DISPLAY (Core 1) - Yields more often for motors
+void displayTask(void *pvParameters) {
+    for (;;) {
+        uint8_t requestedFace = incomingDataState.faceIdx;
+        if (requestedFace == 0) requestedFace = 4;
+
+        if (currentFace != requestedFace) {
+            currentFace = requestedFace; drawFace(currentFace);
+        } else {
+            digitalWrite(TFT_CS_BIG, HIGH);
+        }
+
+        if (millis() - lastRecvTime < 1000 && musicPlaying) {
+            updateVisualizerFromAudio(); screenIsBlack = false;
+        } else {
+            if (!screenIsBlack) {
+                clearSmall(COLOR_BLACK); triggerStrobe(false); strobeActive = false;
+                for (int i = 0; i < NUM_BANDS; i++) { bandLevels[i] = 0; prevBandLevels[i] = 0; }
+                screenIsBlack = true; drawFace(currentFace);
+            }
+        }
+        vTaskDelay(pdMS_TO_TICKS(15)); 
+    }
+}
+
+// AUDIO TIMER (Core 0) - CALITATE REPARATA
+// Am scos filtrul de netezire si am crescut volumul!
 void IRAM_ATTR onAudioTimer(void *arg) {
-  uint8_t samples[2];
-  size_t bytes = xStreamBufferReceiveFromISR(audioBuffer, samples, 2, NULL);
+    uint8_t samples[2];
+    size_t bytes = xStreamBufferReceiveFromISR(audioBuffer, samples, 2, NULL);
+    
+    // NU MAI FOLOSIM FILTRUL DE NETEZIRE CARE STRICA CALITATEA
+    if (bytes == 2) {
+        int16_t rawSample16 = (int16_t)((samples[1] << 8) | samples[0]);
+        
+        // Atentuare mai mica (90% volum) pentru claritate maxima
+        int32_t attenuated = (rawSample16 * 9) / 10;
+        
+        int16_t outVal = (attenuated / 256) + 128;
 
-  if (bytes == 2) {
-    // Reconstituim 16-bit signed
-    int16_t rawSample16 = (int16_t)((samples[1] << 8) | samples[0]);
-
-    // === AUDIO FIX: ATENUARE DIGITALA (75% Volum) ===
-    // Previne clipping-ul in DAC-ul de 8 biti
-    int32_t attenuated = (rawSample16 * 3) / 4;
-
-    // Conversie la 8-bit unsigned (centrat pe 128)
-    int16_t outVal = (attenuated / 256) + 128;
-
-    // Clamp Hard (Siguranta sa nu dam overflow la 0 sau 255)
-    if (outVal > 255) outVal = 255;
-    if (outVal < 0) outVal = 0;
-
-    dac_oneshot_output_voltage(dac_left, (uint8_t)outVal);
-    dac_oneshot_output_voltage(dac_right, (uint8_t)outVal);
-  } else {
-    // Silence lin
-    dac_oneshot_output_voltage(dac_left, 128);
-    dac_oneshot_output_voltage(dac_right, 128);
-  }
+        // Fara Low Pass Filter! Direct la DAC.
+        if (outVal > 255) outVal = 255; 
+        if (outVal < 0) outVal = 0;
+        
+        dac_oneshot_output_voltage(dac_left, (uint8_t)outVal); 
+        dac_oneshot_output_voltage(dac_right, (uint8_t)outVal);
+    } else {
+        // Daca nu avem date, tinem DAC-ul STABIL la 128 (Mijloc)
+        // Nu facem fade-out pentru ca ala cauza zgomotul de "tiuit"
+        dac_oneshot_output_voltage(dac_left, 128); 
+        dac_oneshot_output_voltage(dac_right, 128);
+    }
 }
 
 void OnDataRecv(const esp_now_recv_info *recv_info, const uint8_t *incoming, int len) {
-  lastRecvTime = millis();
+    lastRecvTime = millis();
+    MotorPacket packet; 
+    bool sendMotor = false;
 
-  if (len == sizeof(RemoteState)) {
-    memcpy(&incomingDataState, incoming, sizeof(incomingDataState));
-    musicPlaying = false;
+    if (len == sizeof(RemoteState)) {
+        memcpy(&incomingDataState, incoming, sizeof(incomingDataState));
+        musicPlaying = false;
+        if (incomingDataState.currentGenre != activeGenre) activeGenre = incomingDataState.currentGenre;
+        
+        packet.drive = incomingDataState.dc.drive;
+        packet.steer = incomingDataState.dc.steer;
+        packet.speed = incomingDataState.speed;
+        sendMotor = true;
+    } 
+    else if (len == sizeof(StreamingPacket)) {
+        memcpy(&incomingDataSP, incoming, sizeof(incomingDataSP));
+        musicPlaying = true;
+        
+        packet.drive = incomingDataSP.dc.drive;
+        packet.steer = incomingDataSP.dc.steer;
+        packet.speed = 2; 
+        sendMotor = true;
 
-    if (incomingDataState.currentGenre != activeGenre) {
-      activeGenre = incomingDataState.currentGenre;
-      Serial.print(">>> GENRE: ");
-      Serial.println(activeGenre);
-    }
-  } else if (len == sizeof(StreamingPacket)) {
-    memcpy(&incomingDataSP, incoming, sizeof(incomingDataSP));
-    musicPlaying = true;
-    long sum = 0;
-    for (int i = 0; i < 240; i += 2) sum += abs((int)incomingDataSP.audioData[i] - 128);
-    currentVolume = sum / 120;
-    xStreamBufferSendFromISR(audioBuffer, incomingDataSP.audioData, 240, NULL);
-  }
-}
-
-void displayTask(void *pvParameters) {
-  for (;;) {
-    uint8_t requestedFace = incomingDataState.faceIdx;
-    if (requestedFace == 0) requestedFace = 4;
-
-    // --- FACE LOGIC: STATIC (NO REFRESH LOOP) ---
-    if (currentFace != requestedFace) {
-      currentFace = requestedFace;
-      drawFace(currentFace);
-    } else {
-      // Daca nu desenam, tinem CS-ul SUS cu dintii!
-      digitalWrite(TFT_CS_BIG, HIGH);
+        long sum = 0; for (int i = 0; i < 240; i += 2) sum += abs((int)incomingDataSP.audioData[i] - 128);
+        currentVolume = sum / 120;
+        xStreamBufferSendFromISR(audioBuffer, incomingDataSP.audioData, 240, NULL);
     }
 
-    if (millis() - lastRecvTime < 1000 && musicPlaying) {
-      updateVisualizerFromAudio();
-      screenIsBlack = false;
-    } else {
-      if (!screenIsBlack) {
-        clearSmall(COLOR_BLACK);
-        triggerStrobe(false);
-        strobeActive = false;
-        for (int i = 0; i < NUM_BANDS; i++) {
-          bandLevels[i] = 0;
-          prevBandLevels[i] = 0;
-        }
-        screenIsBlack = true;
-
-        // Redesenam o data fata la stop, just in case
-        drawFace(currentFace);
-      }
+    if (sendMotor) {
+        xQueueOverwriteFromISR(motorQueue, &packet, NULL);
     }
-    vTaskDelay(pdMS_TO_TICKS(10));
-  }
 }
 
 void setup() {
-  Serial.begin(115200);
+    Serial.begin(115200);
 
-  spi.begin(18, -1, 23, -1);
-  spi.setFrequency(2000000);
-  spi.setDataMode(SPI_MODE0);
-  spi.setBitOrder(MSBFIRST);
+    spi.begin(18, -1, 23, -1);
+    spi.setFrequency(2000000); spi.setDataMode(SPI_MODE0); spi.setBitOrder(MSBFIRST);
 
-  pinMode(SR_LATCH, OUTPUT);
-  pinMode(TFT_WR, OUTPUT);
-  pinMode(TFT_RS, OUTPUT);
-  pinMode(TFT_RST, OUTPUT);
-  pinMode(TFT_CS_SMALL, OUTPUT);
-  pinMode(TFT_CS_BIG, OUTPUT);
+    pinMode(SR_LATCH, OUTPUT); pinMode(TFT_WR, OUTPUT); pinMode(TFT_RS, OUTPUT); pinMode(TFT_RST, OUTPUT);
+    pinMode(TFT_CS_SMALL, OUTPUT); pinMode(TFT_CS_BIG, OUTPUT);
 
-  digitalWrite(TFT_CS_SMALL, HIGH);
-  digitalWrite(TFT_CS_BIG, HIGH);
-  digitalWrite(TFT_WR, HIGH);
-  digitalWrite(TFT_RS, HIGH);
-  digitalWrite(SR_LATCH, HIGH);
-  digitalWrite(TFT_RST, HIGH);
-  delay(50);
-  digitalWrite(TFT_RST, LOW);
-  delay(50);
-  digitalWrite(TFT_RST, HIGH);
-  delay(200);
+    digitalWrite(TFT_CS_SMALL, HIGH); digitalWrite(TFT_CS_BIG, HIGH);
+    digitalWrite(TFT_WR, HIGH); digitalWrite(TFT_RS, HIGH); digitalWrite(SR_LATCH, HIGH);
+    digitalWrite(TFT_RST, HIGH); delay(50); digitalWrite(TFT_RST, LOW); delay(50); digitalWrite(TFT_RST, HIGH); delay(200);
 
-  initSmallScreen();
-  initBigScreen();
+    initSmallScreen(); initBigScreen();
 
-  // Test rapid
-  clearSmall(COLOR_RED);
-  delay(100);
-  clearSmall(COLOR_BLACK);
-  clearBig(COLOR_BLUE);
-  delay(100);
-  clearBig(COLOR_BLACK);
+    // I2C & Motoare
+    Wire.begin(I2C_SDA, I2C_SCL);
+    pwm.begin();
+    pwm.setPWMFreq(1000); 
+    executeMotors(0, 0, 0);
 
-  WiFi.mode(WIFI_STA);
-  esp_wifi_set_max_tx_power(84);
-  esp_wifi_set_ps(WIFI_PS_NONE);
-  if (esp_now_init() != ESP_OK) return;
-  esp_now_register_recv_cb(OnDataRecv);
+    motorQueue = xQueueCreate(1, sizeof(MotorPacket));
 
-  audioBuffer = xStreamBufferCreate(8192, 1);
-  dac_oneshot_config_t dac_conf = { .chan_id = DAC_CHAN_0 };
-  dac_oneshot_new_channel(&dac_conf, &dac_left);
-  dac_oneshot_output_voltage(dac_left, 128);
-  dac_conf.chan_id = DAC_CHAN_1;
-  dac_oneshot_new_channel(&dac_conf, &dac_right);
-  dac_oneshot_output_voltage(dac_right, 128);
+    WiFi.mode(WIFI_STA); esp_wifi_set_max_tx_power(84); esp_wifi_set_ps(WIFI_PS_NONE);
+    if (esp_now_init() != ESP_OK) return;
+    esp_now_register_recv_cb(OnDataRecv);
 
-  const esp_timer_create_args_t timer_args = { .callback = &onAudioTimer, .name = "audio_timer" };
-  esp_timer_create(&timer_args, &audio_timer);
-  esp_timer_start_periodic(audio_timer, 62);
+    // BUFFER PUTIN MAI MARE PT SIGURANTA
+    audioBuffer = xStreamBufferCreate(10240, 1);
+    
+    dac_oneshot_config_t dac_conf = { .chan_id = DAC_CHAN_0 };
+    dac_oneshot_new_channel(&dac_conf, &dac_left); dac_oneshot_output_voltage(dac_left, 128);
+    dac_conf.chan_id = DAC_CHAN_1;
+    dac_oneshot_new_channel(&dac_conf, &dac_right); dac_oneshot_output_voltage(dac_right, 128);
 
-  xTaskCreatePinnedToCore(displayTask, "DisplayTask", 4096, NULL, 1, NULL, 1);
+    const esp_timer_create_args_t timer_args = { .callback = &onAudioTimer, .name = "audio_timer" };
+    esp_timer_create(&timer_args, &audio_timer);
+    esp_timer_start_periodic(audio_timer, 62);
+
+    // LANSARE TASKS (BALANSARE NUCLEE PT STABILITATE)
+    xTaskCreatePinnedToCore(displayTask, "DisplayTask", 4096, NULL, 1, NULL, 1);
+    xTaskCreatePinnedToCore(motorTask, "MotorTask", 2048, NULL, 1, NULL, 1);
 }
 
 void loop() {
-  delay(10);
+    delay(10);
 }
