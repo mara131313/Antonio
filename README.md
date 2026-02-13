@@ -10,11 +10,11 @@ The robot is responsible for autonomous behavior, movement, and audio-visual fee
 
 
 ### ABOUT ROBOT
-The robot "ANTONIO" features a red panda–inspired designed for expressive and interactive behavior. ANTONIO will be equipped with a speaker capable of playing multiple music genres. For each music category, the robot will perform a specific “emote” by coordinating movements of its hands, head, tail, and “legs,” allowing it to dance according to the music.  
+The robot "ANTONIO" features a red panda–inspired designed for expressive and interactive behavior. ANTONIO will be equipped with a speaker capable of playing multiple music genres. For each music category, the robot will perform a specific “emote” by coordinating movements of its hands, head, tail, and “legs”, allowing it to dance according to the music.  
 
 ANTONIO can move when the user interacts with a remote controller. If the user chooses to control the robot’s movement while it is dancing, they will have full control over its direction. Otherwise, ANTONIO will move autonomously based on the selected music genre.  
 
-The robot includes an integrated microSD card on which music files can be downloaded and stored. Two music recognition methods are planned. The first method relies on manually assigned tags that define the genre of each song. The second method uses basic pattern recognition by analyzing drum rhythms, aiming to provide a lightweight and feasible genre classification approach.  
+The remote includes an integrated microSD card on which music files can be downloaded and stored. Two music recognition methods are planned. The first method relies on manually assigned tags that define the genre of each song. The second method uses basic pattern recognition by analyzing drum rhythms, aiming to provide a lightweight and feasible genre classification approach. For this stage of our presentation, we implemented the first method.  
   
 ANTONIO features two visual output elements:
 - a face display used to show animated expressions
@@ -42,20 +42,28 @@ The remote controller serves two main purposes: controlling the robot's movement
 
 The proposed design of the remote is inspired by a red panda paw, matching the robot’s red panda–inspired visual identity. This design was chosen to make the interaction playful, intuitive, and visually distinctive. At the center of the controller, a touch display will be integrated for menu navigation and visual feedback.  
 
-An on/off power button will be placed on the tip of the pinky finger. The thumb fingertip will include a joystick used for controlling the robot's movement. Additionally, a buzzer will be integrated into the index finger, providing audio feedback when selecting or confirming menu options.  
+An on/off power button will be placed on the tip of the pinky finger. The thumb fingertip will include a joystick used for controlling the robot's movement. Additionally, a buzzer will be integrated below the display, providing audio feedback when selecting or confirming menu options.  
 
 1. MOVEMENT 
   - the robot's direction is controlled using a joystick located on the thumb
   - the joystick allows forward, backward, and left/right movement 
 2. SETTINGS
-  - volume: allows adjusting the volume 
-  - music: allows selecting different tracks
-  - face expression: allows changing ANTONIO's face from the established options
-  - test mode: allows testing each moving component individually
+  - remote settings:
+    - theme song: allows turning the theme song on/off
+    - volume: allows adjusting the volume of the buzzer
+    - brightness: allows adjusting the brightness of the remote's display
+  - music: allows selecting different tracks, skipping, pausing and selecting previous songs
+  - robot settings:
+    - face expression: allows changing ANTONIO's face from the established options
+    - brightness: allows adjusting ANTONIO's 2 displays' brightness (*not yet*)
+    - volume: allows adjusting ANTONIO'S spearks' volume (*not yet*)
+    - speed: allows choosing the speed at which ANTONIO moves (*not yet*)
+  - test mode: allows testing each moving component individually (*not yet*)
   - about creators: shows info about the creators of ANTONIO :
     - Vraciu Mara-Alina - https://github.com/mara131313
     - Andrei Cosmin Petru - https://github.com/cosmo1avo
     - Pincu Victor Andrei - https://github.com/PincuVictor  
+    - each creator will have their own individual dance planned (*not yet*)
 
 ## BILL OF MATERIALS 
 ### ROBOT:
@@ -104,11 +112,11 @@ An on/off power button will be placed on the tip of the pinky finger. The thumb 
 - Modular and expandable hardware architecture
 
 ### REMOTE
-- Touchscreen-based menu navigation
+- Touchscreen: multi-page menu system with smooth scrolling for the music library.
 - Joystick-based movement control
-- Audio feedback via integrated buzzer
+- Audio Feedback: buzzer calibrated for musical frequencies and variable volume using PWM (Duty Cycle) mapping
 - Visual feedback through touch display
-- Wireless Bluetooth communication with the robot
+- Wireless Communication: real-time transmission using the ESP-NOW protocol to ensure minimal latency
 
 ### SYSTEM
 - Concurrent handling of motors, audio, and displays
@@ -159,7 +167,7 @@ The remote serves as the command center, featuring a custom Graphical User Inter
 - **Menu Structure:** Organized into intuitive pages (Test Mode, Settings, Music) with large, touch-friendly elements. It includes configuration settings for both ANTONIO and the remote, enabling customizations such as facial expressions, theme songs, brightness and description of the project's creators. The music tab features a scrollable list of 20 songs, displays random custom artwork for each track, and includes playback controls (pause/resume, next, previous).
 - **User Feedback:** Provides immediate visual updates on the screen and audio cues via the integrated buzzer when commands are registered.
 - **Data Transmission:** Encodes user inputs (drive vectors, volume states, emote requests) into optimized data packets sent wirelessly to the robot.
-- **Lead Developer (Interface):** **Vraciu Mara Alina** is responsible for designing and implementing the custom, intuitive user interface.
+- **Lead Developer (Interface):** **Vraciu Mara Alina** is responsible for designing and implementing the custom, intuitive user interface, with each component across every page individually crafted and built from the ground up.
 
 ### FIRMWARE & CONTROL LOGIC
 The "brain" of the robot is designed to handle high-concurrency requirements, ensuring that music playback remains uninterrupted while the robot dances or moves.
